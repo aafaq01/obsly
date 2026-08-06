@@ -7,17 +7,23 @@ hit once Obsly can monitor itself.
 
 import logging
 
-from django.db import DatabaseError, connection
+from django.db import DatabaseError, connection, transaction
 from django.http import HttpRequest, JsonResponse
 
 logger = logging.getLogger(__name__)
 
 
+@transaction.non_atomic_requests
 def health(request: HttpRequest) -> JsonResponse:
     """Report process liveness and database reachability.
 
     Returns 503 rather than 200-with-a-body on failure, so that a load balancer pulls the
     instance without needing to parse JSON.
+
+    Must stay non-atomic. ATOMIC_REQUESTS opens a transaction before the view is entered, so
+    with it enabled a genuinely unreachable database raises OperationalError out of the
+    middleware and this function never runs — the endpoint would fail to report the one
+    condition it exists to report.
     """
     try:
         with connection.cursor() as cursor:
