@@ -1,0 +1,73 @@
+[project]
+name = "obsly-backend"
+version = "0.1.0"
+description = "Obsly ingest and API server"
+requires-python = ">=3.12"
+dependencies = [
+    "django>=6.1,<7",
+    "djangorestframework>=3.17",
+    "psycopg[binary]>=3.3",
+    "django-environ>=0.12",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-django>=4.9",
+    "pytest-cov>=6.0",
+    "ruff>=0.9",
+    "mypy>=1.14",
+    "django-stubs[compatible-mypy]>=5.1",
+    "djangorestframework-stubs[compatible-mypy]>=3.15",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+extend-exclude = ["*/migrations/*"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle
+    "F",    # pyflakes
+    "I",    # isort
+    "N",    # pep8-naming
+    "UP",   # pyupgrade
+    "B",    # bugbear
+    "C4",   # comprehensions
+    "DJ",   # flake8-django
+    "S",    # bandit
+    "T20",  # no print
+    "SIM",  # simplify
+    "RUF",
+]
+ignore = [
+    "S101",  # assert is how pytest asserts
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S105", "S106"]  # hardcoded credentials are the point in fixtures
+
+[tool.mypy]
+python_version = "3.12"
+plugins = ["mypy_django_plugin.main", "mypy_drf_plugin.main"]
+strict = true
+warn_unreachable = true
+exclude = ["migrations/"]
+
+[[tool.mypy.overrides]]
+module = "environ.*"
+ignore_missing_imports = true
+
+[tool.django-stubs]
+django_settings_module = "config.settings"
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings"
+testpaths = ["tests"]
+addopts = "--strict-markers --strict-config -ra"
+
+[tool.coverage.run]
+source = ["config"]
+# wsgi/asgi are framework entry points — covering them would test Django, not Obsly.
+omit = ["*/migrations/*", "*/tests/*", "*/wsgi.py", "*/asgi.py"]

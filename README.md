@@ -37,14 +37,38 @@ reference material, not a specification of this codebase.
 
 ## Development
 
-Requires Python 3.12+, Node 20+, Docker.
+Requires Python 3.12+, Node 22+, Docker, and [uv](https://docs.astral.sh/uv/).
 
 ```bash
-make setup     # install backend + frontend deps
-make up        # start postgres
-make migrate   # apply migrations
-make dev       # run backend and frontend
-make test      # run every gate CI runs
+docker compose up -d                        # postgres on :5432
+
+cd backend
+cp .env.example .env                        # then set DJANGO_SECRET_KEY
+uv sync
+uv run python manage.py migrate
+uv run python manage.py runserver           # :8000
+
+cd ../frontend
+npm install
+npm run dev                                 # :5173, proxies /api and /health to :8000
+```
+
+Settings deliberately have no fallback for `DJANGO_SECRET_KEY` or `DATABASE_URL` — a missing
+value fails at boot rather than silently starting with a shared default.
+
+### Running the gates
+
+CI runs exactly these. Run them before pushing.
+
+```bash
+cd backend
+uv run ruff check . && uv run ruff format --check .
+uv run mypy .
+uv run python manage.py makemigrations --check --dry-run
+uv run pytest --cov --cov-report=term-missing
+
+cd ../frontend
+npm run lint && npm run format:check && npm run typecheck && npm test && npm run build
 ```
 
 ## Licence
