@@ -15,6 +15,7 @@ dev = [
     "pytest>=8.3",
     "pytest-django>=4.9",
     "pytest-cov>=6.0",
+    "pytest-env>=1.1",
     "ruff>=0.9",
     "mypy>=1.14",
     "django-stubs[compatible-mypy]>=5.1",
@@ -66,6 +67,19 @@ django_settings_module = "config.settings"
 DJANGO_SETTINGS_MODULE = "config.settings"
 testpaths = ["tests"]
 addopts = "--strict-markers --strict-config -ra"
+
+# Set via pytest-env, not conftest.py: pytest-django runs django.setup() inside
+# pytest_load_initial_conftests, before any conftest module is imported, so a conftest can never
+# influence settings. pytest-env hooks the same phase tryfirst.
+#   plain NAME= forces the value, D:NAME= only supplies a default.
+env = [
+    # Forced. Tests must exercise the production security posture; a developer whose .env says
+    # DEBUG=True must not get a quieter run than CI. This exact gap hid an SSL-redirect bug.
+    "DJANGO_DEBUG=False",
+    # Defaults. CI and local Postgres live at different addresses.
+    "D:DJANGO_SECRET_KEY=test-key-not-used-outside-tests",
+    "D:DATABASE_URL=postgres://obsly:obsly@localhost:5432/obsly",
+]
 
 [tool.coverage.run]
 source = ["config"]

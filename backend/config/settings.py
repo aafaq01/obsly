@@ -16,7 +16,9 @@ env = environ.Env(
     DJANGO_ALLOWED_HOSTS=(list, ["localhost", "127.0.0.1"]),
     DJANGO_CORS_ORIGINS=(list, ["http://localhost:5173"]),
 )
-environ.Env.read_env(BASE_DIR / ".env")
+# overwrite=False so a real environment variable always beats the .env file. Tests set their
+# environment before Django loads and must not have it silently replaced by a developer's .env.
+environ.Env.read_env(BASE_DIR / ".env", overwrite=False)
 
 # --- Core -------------------------------------------------------------------
 
@@ -111,6 +113,9 @@ REST_FRAMEWORK = {
 
 if not DEBUG:
     SECURE_SSL_REDIRECT = True
+    # Load balancer and Kubernetes probes reach the pod over plain HTTP inside the cluster;
+    # redirecting them to HTTPS makes every probe fail. Health exposes no sensitive data.
+    SECURE_REDIRECT_EXEMPT = [r"^health/$"]
     SECURE_HSTS_SECONDS = 31_536_000
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
