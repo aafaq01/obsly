@@ -119,6 +119,8 @@ class EventSerializer(serializers.ModelSerializer[Event]):
             "release",
             "server_name",
             "tags",
+            "trace_id",
+            "span_id",
             "exception",
             "payload",
         )
@@ -240,3 +242,14 @@ class TraceDetailSerializer(TransactionSerializer):
             "span_count",
             "spans",
         )
+
+
+class CorrelatedErrorSerializer(serializers.ModelSerializer[Event]):
+    """An error, as seen from the trace it happened inside."""
+
+    issue_id = serializers.IntegerField(source="issue.id", read_only=True, default=None)
+    title = serializers.CharField(read_only=True)
+
+    class Meta:
+        model = Event
+        fields = ("id", "issue_id", "title", "level", "timestamp", "span_id")

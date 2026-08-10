@@ -21,7 +21,7 @@ export function IssueDetailPage() {
   if (error) return <Notice>{error}</Notice>
   if (!detail) return <Notice>Loading issue…</Notice>
 
-  const { issue, latest_event: event, tags } = detail
+  const { issue, latest_event: event, tags, trace } = detail
 
   return (
     <>
@@ -49,6 +49,17 @@ export function IssueDetailPage() {
         {event?.release && <Meta label="Release" value={event.release} />}
         {event?.environment && <Meta label="Environment" value={event.environment} />}
       </dl>
+
+      {trace && (
+        <Link to={`/traces/${trace.id}`} className="correlate">
+          <span className="correlate__label">Happened inside</span>
+          <code>{trace.name}</code>
+          <span className="correlate__meta">
+            {Math.round(trace.duration_ms)}ms · {trace.status}
+          </span>
+          <span className="correlate__go">View trace →</span>
+        </Link>
+      )}
 
       <div className="issue-grid">
         <div className="issue-grid__main">

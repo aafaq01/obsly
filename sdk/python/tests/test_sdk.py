@@ -420,3 +420,54 @@ class TestTracing:
         [txn] = self.transactions(transport)
         assert len(txn["spans"]) == 1000
         assert txn["dropped_spans"] == 200
+
+
+class TestErrorTraceCorrelation:
+    def test_an_error_inside_a_transaction_carries_its_trace(
+        self, transport: FakeTransport
+    ) -> None:
+        """The one line that makes an error and a trace the same story instead of two tables
+        joined by a timestamp guess."""
+        client = Client(DSN, transport=transport, traces_sample_rate=1.0)  # type: ignore[arg-type]
+
+        with client.start_transaction("/checkout", "http.server") as transaction:
+            client.capture_exception(ValueError("cart is empty"))
+
+        errors = [e for e in transport.events() if e.get("type") != "transaction"]
+        assert errors[0]["contexts"]["trace"]["trace_id"] == transaction.trace_id
+
+    def test_an_error_outside_a_transaction_carries_no_trace(
+        self, transport: FakeTransport
+    ) -> None:
+        client = Client(DSN, transport=transport)  # type: ignore[arg-type]
+
+        client.capture_exception(ValueError("boom"))
+
+        assert "contexts" not in transport.events()[0]
+
+    def test_an_unsampled_transaction_does_not_attach_a_trace(
+        self, transport: FakeTransport
+    ) -> None:
+        """Pointing an error at a trace that was never recorded is a dead link."""
+        client = Client(DSN, transport=transport, traces_sample_rate=0.0)  # type: ignore[arg-type]
+
+        with client.start_transaction("/checkout", "http.server"):
+            client.capture_exception(ValueError("boom"))
+
+        errors = [e for e in transport.events() if e.get("type") != "transaction"]
+        assert "contexts" not in errors[0]
+
+    def test_the_span_id_is_the_innermost_active_span(self, transport: FakeTransport) -> None:
+        """So the error pins to the specific operation, not just the request."""
+        client = Client(DSN, transport=transport, traces_sample_rate=1.0)  # type: ignore[arg-type]
+        obsly.client._client = client
+
+        with (
+            client.start_transaction("/checkout", "http.server"),
+            obsly.start_span("db.query", "SELECT 1") as span,
+        ):
+            client.capture_exception(ValueError("boom"))
+            inner = span.span_id
+
+        errors = [e for e in transport.events() if e.get("type") != "transaction"]
+        assert errors[0]["contexts"]["trace"]["span_id"] == inner

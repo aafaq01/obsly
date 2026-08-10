@@ -13,7 +13,7 @@ from typing import Any
 
 from obsly import dsn as dsn_module
 from obsly.stacktrace import exception_chain
-from obsly.tracing import Transaction, _current_span
+from obsly.tracing import Transaction, _current_span, get_current_span
 from obsly.transport import Transport, build_envelope
 
 logger = logging.getLogger("obsly")
@@ -72,6 +72,15 @@ class Client:
         }
         if extra:
             event["extra"] = extra
+
+        # The single line that makes an error and a trace the same story. Without it the two
+        # are separate tables joined by a timestamp guess, which is exactly the correlation
+        # every other tool leaves to the operator.
+        span = get_current_span()
+        if span is not None and span.sampled:
+            event["contexts"] = {
+                "trace": {"trace_id": span.trace_id, "span_id": span.span_id, "op": span.op}
+            }
 
         envelope = build_envelope(
             {"event_id": event_id, "sent_at": event["timestamp"]},

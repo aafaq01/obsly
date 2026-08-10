@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 
 import { api, type TraceDetail as Detail } from '../api'
 import { Notice } from '../components/Notice'
@@ -37,6 +37,28 @@ export function TraceDetail() {
         <Stat label="Release" value={trace.release || '—'} />
         <Stat label="Started" value={absoluteTime(trace.start_timestamp)} />
       </div>
+
+      {trace.errors.length > 0 && (
+        <div className="section">
+          <h2 className="section__title">Errors in this request</h2>
+          <div className="card">
+            {trace.errors.map((error) =>
+              error.issue_id ? (
+                <Link to={`/issues/${error.issue_id}`} className="correlate-row" key={error.id}>
+                  <span className={`level level--${error.level}`}>{error.level}</span>
+                  <span className="correlate-row__title">{error.title}</span>
+                  <span className="correlate-row__go">View issue →</span>
+                </Link>
+              ) : (
+                <div className="correlate-row" key={error.id}>
+                  <span className={`level level--${error.level}`}>{error.level}</span>
+                  <span className="correlate-row__title">{error.title}</span>
+                </div>
+              ),
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="section">
         <h2 className="section__title">Waterfall</h2>
