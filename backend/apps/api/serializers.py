@@ -21,7 +21,15 @@ class IssueSerializer(serializers.ModelSerializer[Issue]):
     must not carry a full event payload per row."""
 
     project = serializers.IntegerField(source="project_id", read_only=True)
-    hourly = serializers.ListField(child=serializers.IntegerField(), read_only=True)
+    hourly = serializers.SerializerMethodField()
+
+    def get_hourly(self, obj: Issue) -> list[int]:
+        """Empty unless a view attached a histogram.
+
+        A plain ListField would raise AttributeError on any endpoint that serialises an Issue
+        without one — which is every mutation response.
+        """
+        return list(getattr(obj, "hourly", []))
 
     class Meta:
         model = Issue

@@ -13,7 +13,10 @@ from typing import Any
 from django.db.models import Count, Q, QuerySet
 from django.db.models.functions import TruncHour
 from django.shortcuts import get_object_or_404
-from rest_framework import generics
+from django.utils import timezone
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import ensure_csrf_cookie
+from rest_framework import generics, status
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -37,7 +40,15 @@ SORTS = {
 }
 
 
+@method_decorator(ensure_csrf_cookie, name="get")
 class MeView(APIView):
+    """Session check, and the SPA's source of a CSRF cookie.
+
+    Without ensure_csrf_cookie the browser only receives a csrftoken after visiting a Django
+    form page, so a user who lands directly on the UI can read but every mutation fails with a
+    403 they cannot act on.
+    """
+
     def get(self, request: Request) -> Response:
         return Response({"username": request.user.get_username()})
 
@@ -106,6 +117,35 @@ class IssueDetailView(generics.RetrieveAPIView[Issue]):
                 "tags": _tag_distribution(issue),
             }
         )
+
+
+class IssueStatusView(APIView):
+    """Move an issue through its workflow.
+
+    Only `status` is writable. Everything else on an Issue is derived from events, and a
+    hand-edited title or count would make the row disagree with the data behind it.
+    """
+
+    def patch(self, request: Request, pk: int) -> Response:
+        issue = get_object_or_404(Issue, pk=pk)
+
+        # A JSON array body parses to a list, and .get() on it is an AttributeError -> 500.
+        # A malformed body is the client's mistake and must read as 400.
+        payload = request.data if isinstance(request.data, dict) else {}
+        new_status = payload.get("status")
+
+        if new_status not in IssueStatus.values:
+            return Response(
+                {"detail": f"status must be one of {', '.join(IssueStatus.values)}"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Recorded so a later regression can be judged against when it was resolved rather
+        # than against "sometime before now".
+        Issue.objects.filter(pk=issue.pk).update(status=new_status, updated_at=timezone.now())
+        issue.refresh_from_db()
+
+        return Response(IssueSerializer(issue).data)
 
 
 class IssueEventsView(generics.ListAPIView[Event]):

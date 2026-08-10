@@ -202,3 +202,94 @@ class TestIssueDetail:
 
         assert response.status_code == 200
         assert json_body(response)["latest_event"] is None
+
+
+class TestIssueWorkflow:
+    def url(self, issue: Issue) -> str:
+        return reverse("api:issue-status", args=[issue.pk])
+
+    def issue(self, client: Client, project: Project, key: ProjectKey) -> Issue:
+        ingest(client, project, key, **error(frames=FRAMES))
+        return Issue.objects.get()
+
+    def test_resolving_an_issue(
+        self, staff_client: Client, project: Project, project_key: ProjectKey
+    ) -> None:
+        issue = self.issue(staff_client, project, project_key)
+
+        response = staff_client.patch(
+            self.url(issue),
+            data={"status": "resolved"},
+            content_type="application/json",
+            secure=True,
+        )
+
+        assert response.status_code == 200
+        assert json_body(response)["status"] == "resolved"
+        issue.refresh_from_db()
+        assert issue.status == IssueStatus.RESOLVED
+
+    def test_ignoring_and_reopening(
+        self, staff_client: Client, project: Project, project_key: ProjectKey
+    ) -> None:
+        issue = self.issue(staff_client, project, project_key)
+
+        for wanted in ("ignored", "unresolved"):
+            staff_client.patch(
+                self.url(issue),
+                data={"status": wanted},
+                content_type="application/json",
+                secure=True,
+            )
+            issue.refresh_from_db()
+            assert issue.status == wanted
+
+    def test_rejects_an_unknown_status(
+        self, staff_client: Client, project: Project, project_key: ProjectKey
+    ) -> None:
+        issue = self.issue(staff_client, project, project_key)
+
+        response = staff_client.patch(
+            self.url(issue),
+            data={"status": "deleted"},
+            content_type="application/json",
+            secure=True,
+        )
+
+        assert response.status_code == 400
+        issue.refresh_from_db()
+        assert issue.status == IssueStatus.UNRESOLVED
+
+    def test_a_non_object_body_is_a_400_not_a_500(
+        self, staff_client: Client, project: Project, project_key: ProjectKey
+    ) -> None:
+        """A JSON array parses to a list, and .get() on a list is an AttributeError."""
+        issue = self.issue(staff_client, project, project_key)
+
+        response = staff_client.patch(
+            self.url(issue), data=[1, 2], content_type="application/json", secure=True
+        )
+
+        assert response.status_code == 400
+
+    def test_anonymous_users_cannot_change_status(
+        self, client: Client, project: Project, project_key: ProjectKey
+    ) -> None:
+        issue = self.issue(client, project, project_key)
+
+        response = client.patch(
+            self.url(issue),
+            data={"status": "resolved"},
+            content_type="application/json",
+            secure=True,
+        )
+
+        assert response.status_code == 403
+        issue.refresh_from_db()
+        assert issue.status == IssueStatus.UNRESOLVED
+
+    def test_me_sets_a_csrf_cookie_so_the_spa_can_mutate(self, staff_client: Client) -> None:
+        """Without it a user landing straight on the UI can read but every write 403s."""
+        response = staff_client.get(reverse("api:me"), secure=True)
+
+        assert "csrftoken" in response.cookies
