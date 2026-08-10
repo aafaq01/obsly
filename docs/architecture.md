@@ -69,6 +69,31 @@ bundle. It authenticates the project and nothing else: it cannot read a single e
 from ambient scope. Correlating an error with the span that produced it is an index lookup, not a
 timestamp heuristic.
 
+## Container topology
+
+```
+  browser ──► :8080  web (nginx)
+                      ├── /              React bundle, SPA fallback
+                      ├── /api/  ────┐
+                      ├── /admin/ ───┤
+                      ├── /static/ ──┼──► :8000  backend (gunicorn + whitenoise)
+                      └── /health/ ──┘              │
+                                                    ▼
+                                            :5432  postgres
+```
+
+One origin. The browser only ever talks to nginx, so there is no CORS configuration to get
+wrong and no preflight on the ingest path — which matters once SDKs in other people's pages
+start posting envelopes.
+
+whitenoise serves Django's static files from inside gunicorn, so admin works without a second
+static file server or a shared volume between containers.
+
+`SECURE_SSL_REDIRECT` and `Secure` cookies are gated behind `DJANGO_HTTPS` rather than `DEBUG`.
+The compose stack runs `DEBUG=False` for production-like error handling but plain HTTP, and
+without that split the redirect would bounce every request and the session cookie would never
+reach the browser.
+
 ## Layout
 
 ```

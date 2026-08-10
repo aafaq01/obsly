@@ -92,3 +92,35 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  stack:
+    # The README promises `docker compose up` works. Without this job that promise rots the
+    # first time someone edits a Dockerfile, and nobody finds out until they try to run it.
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build images
+        run: docker compose build
+
+      - name: Start the stack
+        run: docker compose up -d --wait --wait-timeout 180
+
+      - name: Smoke test through nginx
+        run: |
+          set -euo pipefail
+          echo "--- health, proxied to Django ---"
+          curl -sf http://localhost:8081/health/ | tee /dev/stderr | grep -q '"database": "ok"'
+          echo "--- SPA shell ---"
+          curl -sf http://localhost:8081/ | grep -q '<div id="root">'
+          echo "--- admin, proving migrations ran and whitenoise serves static ---"
+          curl -sf -o /dev/null -w '%{http_code}\n' http://localhost:8081/admin/login/ | grep -q 200
+
+      - name: Dump logs on failure
+        if: failure()
+        run: docker compose logs --no-color --tail 100
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
