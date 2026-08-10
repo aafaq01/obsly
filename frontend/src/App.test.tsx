@@ -68,21 +68,65 @@ function renderApp() {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('App authentication', () => {
-  it('prompts to sign in when the session is missing', async () => {
-    mockApi({ '/me/': { status: 403, body: {} } })
+  it('shows its own sign-in form rather than sending you to the admin', async () => {
+    mockApi({ '/me/': { body: { authenticated: false, username: null } } })
 
     renderApp()
 
-    expect(await screen.findByText(/Sign in to continue/)).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /sign in here/i })).toHaveAttribute(
-      'href',
-      '/admin/login/?next=/',
-    )
+    expect(await screen.findByRole('heading', { name: /Sign in to Obsly/ })).toBeInTheDocument()
+    expect(screen.getByLabelText('Username')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: /admin/i })).not.toBeInTheDocument()
+  })
+
+  it('signs in and lands on the issue stream', async () => {
+    mockApi({
+      '/me/': { body: { authenticated: false, username: null } },
+      '/auth/login/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/': { body: [PROJECT] },
+      '/projects/1/issues/': { body: [ISSUE] },
+    })
+
+    renderApp()
+
+    await userEvent.type(await screen.findByLabelText('Username'), 'admin')
+    await userEvent.type(screen.getByLabelText('Password'), 'hunter2')
+    await userEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+
+    expect(await screen.findByText('ValueError: cart is empty')).toBeInTheDocument()
+  })
+
+  it('shows the server message when credentials are wrong', async () => {
+    mockApi({
+      '/me/': { body: { authenticated: false, username: null } },
+      '/auth/login/': { status: 401, body: { detail: 'Incorrect username or password.' } },
+    })
+
+    renderApp()
+
+    await userEvent.type(await screen.findByLabelText('Username'), 'admin')
+    await userEvent.type(screen.getByLabelText('Password'), 'wrong')
+    await userEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Incorrect username or password.')
+  })
+
+  it('signs out', async () => {
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/auth/logout/': { body: { authenticated: false, username: null } },
+      '/projects/': { body: [PROJECT] },
+      '/projects/1/issues/': { body: [] },
+    })
+
+    renderApp()
+    await userEvent.click(await screen.findByRole('button', { name: 'Sign out' }))
+
+    expect(await screen.findByRole('heading', { name: /Sign in to Obsly/ })).toBeInTheDocument()
   })
 
   it('shows the signed-in user', async () => {
     mockApi({
-      '/me/': { body: { username: 'admin' } },
+      '/me/': { body: { authenticated: true, username: 'admin' } },
       '/projects/': { body: [PROJECT] },
       '/projects/1/issues/': { body: [] },
     })
@@ -96,7 +140,7 @@ describe('App authentication', () => {
 describe('Issue stream', () => {
   it('renders an issue with its title, culprit and event count', async () => {
     mockApi({
-      '/me/': { body: { username: 'admin' } },
+      '/me/': { body: { authenticated: true, username: 'admin' } },
       '/projects/': { body: [PROJECT] },
       '/projects/1/issues/': { body: [ISSUE] },
     })
@@ -110,7 +154,7 @@ describe('Issue stream', () => {
 
   it('says nothing was reported rather than implying nothing is wrong', async () => {
     mockApi({
-      '/me/': { body: { username: 'admin' } },
+      '/me/': { body: { authenticated: true, username: 'admin' } },
       '/projects/': { body: [PROJECT] },
       '/projects/1/issues/': { body: [] },
     })
@@ -123,7 +167,7 @@ describe('Issue stream', () => {
 
   it('sends the search term to the API', async () => {
     const fetchMock = mockApi({
-      '/me/': { body: { username: 'admin' } },
+      '/me/': { body: { authenticated: true, username: 'admin' } },
       '/projects/': { body: [PROJECT] },
       '/projects/1/issues/': { body: [ISSUE] },
     })
@@ -141,7 +185,7 @@ describe('Issue stream', () => {
 
   it('surfaces an expired session distinctly from a generic failure', async () => {
     mockApi({
-      '/me/': { body: { username: 'admin' } },
+      '/me/': { body: { authenticated: true, username: 'admin' } },
       '/projects/': { status: 401, body: {} },
     })
 
@@ -207,7 +251,7 @@ describe('StatusActions', () => {
 
   it('offers only the transitions valid from the current status', async () => {
     mockApi({
-      '/me/': { body: { username: 'admin' } },
+      '/me/': { body: { authenticated: true, username: 'admin' } },
       '/issues/9/': { body: ISSUE_DETAIL },
     })
 
@@ -221,7 +265,7 @@ describe('StatusActions', () => {
   it('sends the CSRF token from the cookie on a mutation', async () => {
     document.cookie = 'csrftoken=token-from-cookie'
     const fetchMock = mockApi({
-      '/me/': { body: { username: 'admin' } },
+      '/me/': { body: { authenticated: true, username: 'admin' } },
       '/issues/9/status/': { body: { ...ISSUE, status: 'resolved' } },
       '/issues/9/': { body: ISSUE_DETAIL },
     })
@@ -240,7 +284,7 @@ describe('StatusActions', () => {
 
   it('does not claim success when the server rejects the change', async () => {
     mockApi({
-      '/me/': { body: { username: 'admin' } },
+      '/me/': { body: { authenticated: true, username: 'admin' } },
       '/issues/9/status/': { status: 500, body: {} },
       '/issues/9/': { body: ISSUE_DETAIL },
     })

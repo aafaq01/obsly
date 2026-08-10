@@ -5,6 +5,7 @@ import { api } from './api'
 import { IssueDetailPage } from './pages/IssueDetailPage'
 import { Notice } from './components/Notice'
 import { Issues } from './pages/Issues'
+import { Login } from './pages/Login'
 
 type Auth = { state: 'loading' } | { state: 'in'; username: string } | { state: 'out' }
 
@@ -13,8 +14,14 @@ export function App() {
 
   useEffect(() => {
     api
-      .me()
-      .then(({ username }) => setAuth({ state: 'in', username }))
+      .session()
+      .then((session) =>
+        setAuth(
+          session.authenticated && session.username
+            ? { state: 'in', username: session.username }
+            : { state: 'out' },
+        ),
+      )
       .catch(() => setAuth({ state: 'out' }))
   }, [])
 
@@ -25,19 +32,24 @@ export function App() {
           Obsly
         </Link>
         <div className="topbar__spacer" />
-        {auth.state === 'in' && <span className="topbar__user">{auth.username}</span>}
+        {auth.state === 'in' && (
+          <>
+            <span className="topbar__user">{auth.username}</span>
+            <button
+              className="button"
+              onClick={() => void api.logout().then(() => setAuth({ state: 'out' }))}
+            >
+              Sign out
+            </button>
+          </>
+        )}
       </header>
 
       <main className="content">
         {auth.state === 'loading' && <Notice>Checking session…</Notice>}
 
         {auth.state === 'out' && (
-          <Notice>
-            <strong>Sign in to continue</strong>
-            The UI reads through the same session as the admin. Authentication of its own arrives in
-            a later change — until then, <a href="/admin/login/?next=/">sign in here</a> and come
-            back.
-          </Notice>
+          <Login onSignedIn={(username) => setAuth({ state: 'in', username })} />
         )}
 
         {auth.state === 'in' && (

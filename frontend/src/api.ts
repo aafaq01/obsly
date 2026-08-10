@@ -110,8 +110,36 @@ async function patch<T>(path: string, body: unknown): Promise<T> {
   return (await response.json()) as T
 }
 
+export interface Session {
+  authenticated: boolean
+  username: string | null
+}
+
+/** The message the server sent, so "Incorrect username or password" reaches the user instead
+ *  of being flattened into a status code. */
+async function post<T>(path: string, body: unknown): Promise<T> {
+  const response = await fetch(`/api/0${path}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      'X-CSRFToken': csrfToken(),
+    },
+    body: JSON.stringify(body),
+  })
+
+  const payload = (await response.json().catch(() => ({}))) as { detail?: string }
+  if (!response.ok) {
+    throw new Error(payload.detail ?? `${path} returned ${response.status}`)
+  }
+  return payload as T
+}
+
 export const api = {
-  me: () => get<{ username: string }>('/me/'),
+  session: () => get<Session>('/me/'),
+  login: (username: string, password: string) =>
+    post<Session>('/auth/login/', { username, password }),
+  logout: () => post<Session>('/auth/logout/', {}),
   projects: () => get<Project[]>('/projects/'),
   issues: (projectId: number, params: URLSearchParams) =>
     get<Issue[]>(`/projects/${projectId}/issues/?${params.toString()}`),

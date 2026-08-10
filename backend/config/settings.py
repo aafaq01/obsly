@@ -134,6 +134,12 @@ REST_FRAMEWORK = {
     ],
     "DEFAULT_RENDERER_CLASSES": ["rest_framework.renderers.JSONRenderer"],
     "UNAUTHENTICATED_USER": None,
+    "DEFAULT_THROTTLE_RATES": {
+        # Login is the one anonymous write endpoint, so it is the one worth guarding
+        # against credential stuffing. Generous enough that a person mistyping twice is
+        # unaffected, tight enough that a script is not.
+        "login": env("OBSLY_LOGIN_RATE", default="10/min"),
+    },
 }
 
 # --- Security ---------------------------------------------------------------

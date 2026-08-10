@@ -14,8 +14,6 @@ from django.db.models import Count, Q, QuerySet
 from django.db.models.functions import TruncHour
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
-from django.utils.decorators import method_decorator
-from django.views.decorators.csrf import ensure_csrf_cookie
 from rest_framework import generics, status
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -38,19 +36,6 @@ SORTS = {
     "first_seen": "-first_seen",
     "times_seen": "-times_seen",
 }
-
-
-@method_decorator(ensure_csrf_cookie, name="get")
-class MeView(APIView):
-    """Session check, and the SPA's source of a CSRF cookie.
-
-    Without ensure_csrf_cookie the browser only receives a csrftoken after visiting a Django
-    form page, so a user who lands directly on the UI can read but every mutation fails with a
-    403 they cannot act on.
-    """
-
-    def get(self, request: Request) -> Response:
-        return Response({"username": request.user.get_username()})
 
 
 class ProjectListView(generics.ListAPIView[Project]):

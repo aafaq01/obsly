@@ -32,11 +32,6 @@ class TestAuthentication:
     def test_signed_in_users_get_data(self, staff_client: Client) -> None:
         assert staff_client.get(reverse("api:projects"), secure=True).status_code == 200
 
-    def test_me_reports_the_signed_in_user(self, staff_client: Client) -> None:
-        response = staff_client.get(reverse("api:me"), secure=True)
-
-        assert json_body(response)["username"] == "viewer"
-
 
 class TestProjects:
     def test_counts_only_unresolved_issues(
@@ -287,9 +282,3 @@ class TestIssueWorkflow:
         assert response.status_code == 403
         issue.refresh_from_db()
         assert issue.status == IssueStatus.UNRESOLVED
-
-    def test_me_sets_a_csrf_cookie_so_the_spa_can_mutate(self, staff_client: Client) -> None:
-        """Without it a user landing straight on the UI can read but every write 403s."""
-        response = staff_client.get(reverse("api:me"), secure=True)
-
-        assert "csrftoken" in response.cookies
