@@ -28,11 +28,13 @@ from apps.api.serializers import (
     ProjectDetailSerializer,
     ProjectKeySerializer,
     ProjectSerializer,
+    TraceDetailSerializer,
+    TransactionSerializer,
 )
 from apps.events.models import Event
 from apps.issues.models import Issue, IssueStatus
 from apps.projects.models import Organization, Project, ProjectKey
-from apps.tracing.models import Transaction
+from apps.tracing.models import SpanStatus, Transaction
 
 HOURS = 24
 
@@ -148,6 +150,44 @@ def _hourly_throughput(queryset: QuerySet[Transaction], since: datetime) -> list
     start = since.replace(minute=0, second=0, microsecond=0)
     buckets = int((datetime.now(tz=UTC) - start).total_seconds() // 3600) + 1
     return [counts.get(start + timedelta(hours=offset), 0) for offset in range(max(buckets, 1))]
+
+
+class TraceListView(generics.ListAPIView[Transaction]):
+    """Recent traces, slowest first by default.
+
+    A trace list sorted by time shows you what happened last; sorted by duration it shows you
+    what to look at. The second is almost always why somebody opened the page.
+    """
+
+    serializer_class = TransactionSerializer
+
+    def get_queryset(self) -> QuerySet[Transaction]:
+        get_object_or_404(Project, pk=self.kwargs["project_id"])
+        since, _ = window(self.request.query_params.get("period", "24h"))
+
+        traces = Transaction.objects.filter(
+            project_id=self.kwargs["project_id"], timestamp__gte=since
+        ).annotate(span_count=Count("spans"))
+
+        name = self.request.query_params.get("name", "").strip()
+        if name:
+            traces = traces.filter(name=name)
+
+        if self.request.query_params.get("status") == "failed":
+            traces = traces.filter(status=SpanStatus.INTERNAL_ERROR)
+
+        order = (
+            "-duration_ms" if self.request.query_params.get("sort") != "recent" else "-timestamp"
+        )
+        return traces.order_by(order)[:100]
+
+
+class TraceDetailView(generics.RetrieveAPIView[Transaction]):
+    serializer_class = TraceDetailSerializer
+    lookup_field = "pk"
+
+    def get_queryset(self) -> QuerySet[Transaction]:
+        return Transaction.objects.prefetch_related("spans").annotate(span_count=Count("spans"))
 
 
 class IssueListView(generics.ListAPIView[Issue]):

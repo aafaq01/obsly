@@ -63,6 +63,37 @@ export interface Performance {
   }
 }
 
+export interface TraceSpan {
+  span_id: string
+  parent_span_id: string
+  op: string
+  description: string
+  status: string
+  start_timestamp: string
+  timestamp: string
+  duration_ms: number
+  data: Record<string, unknown>
+}
+
+export interface TraceSummary {
+  id: string
+  trace_id: string
+  span_id: string
+  name: string
+  op: string
+  status: string
+  start_timestamp: string
+  timestamp: string
+  duration_ms: number
+  environment: string
+  release: string
+  span_count: number
+}
+
+export interface TraceDetail extends TraceSummary {
+  spans: TraceSpan[]
+}
+
 export interface Frame {
   filename: string
   module: string
@@ -201,6 +232,9 @@ export const api = {
   issues: (projectId: number, params: URLSearchParams) =>
     get<Issue[]>(`/projects/${projectId}/issues/?${params.toString()}`),
   issue: (id: number) => get<IssueDetail>(`/issues/${id}/`),
+  traces: (projectId: number, params: URLSearchParams) =>
+    get<TraceSummary[]>(`/projects/${projectId}/traces/?${params.toString()}`),
+  trace: (id: string) => get<TraceDetail>(`/traces/${id}/`),
   performance: (projectId: number, period: string) =>
     get<Performance>(`/projects/${projectId}/performance/?period=${period}`),
   issueEvents: (id: number) => get<ObslyEvent[]>(`/issues/${id}/events/`),

@@ -1,81 +1,122 @@
 import { useState } from 'react'
 
 interface Props {
-  /** One count per hour, oldest first. */
+  /** One count per bucket, oldest first. */
   hourly: number[]
+  /** Row-sized: bars only, no axis or readout. */
   compact?: boolean
+  /** What one bucket covers, for the axis and the table view. */
+  bucketHours?: number
+  unit?: string
 }
 
-const GAP = 2 // surface gap between bars, per the mark spec
-const RADIUS = 2
-
 /**
- * Events per hour over the last 24 hours.
+ * Counts per hour over a window.
  *
- * One series, so no legend — the surrounding heading names it. Bars are anchored to the
- * baseline with rounded tops only; a rounded bottom would lift the mark off its own zero line
- * and misstate the value.
+ * Built from positioned elements rather than a scaled SVG viewBox: `preserveAspectRatio="none"`
+ * stretches the geometry horizontally, so a 2px corner radius renders as a visibly squashed
+ * ellipse at full width.
+ *
+ * The value is readable three ways — the axis maximum, the hover readout, and a table view —
+ * because a tooltip that is the only route to a number is unreachable by keyboard and gone
+ * the moment you look away.
  */
-export function EventChart({ hourly, compact = false }: Props) {
+export function EventChart({ hourly, compact = false, bucketHours = 1, unit = 'events' }: Props) {
   const [hover, setHover] = useState<number | null>(null)
+  const [showTable, setShowTable] = useState(false)
 
-  const height = compact ? 28 : 120
-  const width = compact ? 110 : 640
   const max = Math.max(...hourly, 1)
-  const barWidth = (width - GAP * (hourly.length - 1)) / hourly.length
+  const total = hourly.reduce((sum, value) => sum + value, 0)
+  const span = hourly.length * bucketHours
+
+  const bars = (
+    <div
+      className={compact ? 'bars bars--compact' : 'bars'}
+      role="img"
+      aria-label={`${unit} per ${bucketHours === 1 ? 'hour' : `${bucketHours} hours`} over the last ${span} hours, ${total} total`}
+    >
+      {hourly.map((count, index) => (
+        <div
+          key={index}
+          className="bars__slot"
+          onMouseEnter={() => setHover(index)}
+          onMouseLeave={() => setHover(null)}
+        >
+          <div
+            className={count === 0 ? 'bars__bar bars__bar--empty' : 'bars__bar'}
+            // A zero bucket still draws a baseline tick: "no events this hour" and "this
+            // chart failed to render" must not look the same.
+            style={{ height: count === 0 ? '1px' : `${Math.max(2, (count / max) * 100)}%` }}
+          />
+        </div>
+      ))}
+    </div>
+  )
+
+  if (compact) return bars
 
   return (
-    <div className={compact ? 'chart chart--compact' : 'chart'}>
-      <svg
-        width="100%"
-        height={height}
-        viewBox={`0 0 ${width} ${height}`}
-        preserveAspectRatio="none"
-        role="img"
-        aria-label={`Events per hour for the last 24 hours, ${hourly.reduce((a, b) => a + b, 0)} total`}
-      >
-        {hourly.map((count, index) => {
-          // Zero must still be visible as a baseline tick, or an empty hour is indistinguishable
-          // from an hour that never rendered.
-          const barHeight = count === 0 ? 1 : Math.max(2, (count / max) * (height - 2))
-          const x = index * (barWidth + GAP)
+    <figure className="chart2">
+      {/* Reserved row, not an overlay. A tooltip positioned above the plot is clipped by the
+          card that contains it — which is exactly what it did before. */}
+      <figcaption className="chart2__readout">
+        {hover === null ? (
+          <>
+            <strong>{total.toLocaleString()}</strong> {unit} · peak {max.toLocaleString()}/
+            {bucketHours === 1 ? 'hr' : `${bucketHours}hr`}
+          </>
+        ) : (
+          <>
+            <strong>{hourly[hover]?.toLocaleString()}</strong> {unit} ·{' '}
+            {bucketLabel(hourly.length - 1 - hover, bucketHours)}
+          </>
+        )}
+      </figcaption>
 
-          return (
-            <g key={index}>
-              <rect
-                x={x}
-                y={height - barHeight}
-                width={barWidth}
-                height={barHeight}
-                rx={count === 0 ? 0 : RADIUS}
-                className={count === 0 ? 'chart__bar chart__bar--empty' : 'chart__bar'}
-              />
-              {/* A full-height hit target: a 3px bar is impossible to hover deliberately. */}
-              <rect
-                x={x}
-                y={0}
-                width={barWidth + GAP}
-                height={height}
-                fill="transparent"
-                onMouseEnter={() => setHover(index)}
-                onMouseLeave={() => setHover(null)}
-              />
-            </g>
-          )
-        })}
-      </svg>
-      {hover !== null && (
-        <div className="chart__tooltip" role="status">
-          <strong>{hourly[hover]}</strong> {hourly[hover] === 1 ? 'event' : 'events'}
-          <span className="chart__tooltip-when">{hoursAgo(hourly.length - 1 - hover)}</span>
-        </div>
+      <div className="chart2__plot">
+        <span className="chart2__ymax">{max.toLocaleString()}</span>
+        {bars}
+      </div>
+
+      <div className="chart2__xaxis">
+        <span>{span}h ago</span>
+        <span>{Math.round(span / 2)}h ago</span>
+        <span>now</span>
+      </div>
+
+      <button className="chart2__toggle" onClick={() => setShowTable(!showTable)}>
+        {showTable ? 'Hide values' : 'Show values as a table'}
+      </button>
+
+      {showTable && (
+        <table className="chart2__table">
+          <thead>
+            <tr>
+              <th>When</th>
+              <th className="num">{unit}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {hourly
+              .map((count, index) => ({ count, index }))
+              .filter(({ count }) => count > 0)
+              .reverse()
+              .map(({ count, index }) => (
+                <tr key={index}>
+                  <td>{bucketLabel(hourly.length - 1 - index, bucketHours)}</td>
+                  <td className="num">{count.toLocaleString()}</td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
       )}
-    </div>
+    </figure>
   )
 }
 
-function hoursAgo(offset: number): string {
-  if (offset === 0) return 'this hour'
-  if (offset === 1) return '1 hour ago'
-  return `${offset} hours ago`
+function bucketLabel(bucketsAgo: number, bucketHours: number): string {
+  const hours = bucketsAgo * bucketHours
+  if (hours === 0) return 'this hour'
+  if (hours === 1) return '1 hour ago'
+  return `${hours} hours ago`
 }

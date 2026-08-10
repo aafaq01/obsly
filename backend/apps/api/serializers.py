@@ -6,6 +6,8 @@ from rest_framework import serializers
 from apps.events.models import Event
 from apps.issues.models import Issue
 from apps.projects.models import Organization, Project, ProjectKey
+from apps.tracing.models import Span
+from apps.tracing.models import Transaction as TransactionModel
 
 
 class OrganizationSerializer(serializers.ModelSerializer[Organization]):
@@ -179,4 +181,62 @@ class IssueDetailSerializer(IssueSerializer):
             "hourly",
             "fingerprint",
             "fingerprint_components",
+        )
+
+
+class SpanSerializer(serializers.ModelSerializer[Span]):
+    class Meta:
+        model = Span
+        fields = (
+            "span_id",
+            "parent_span_id",
+            "op",
+            "description",
+            "status",
+            "start_timestamp",
+            "timestamp",
+            "duration_ms",
+            "data",
+        )
+
+
+class TransactionSerializer(serializers.ModelSerializer[TransactionModel]):
+    span_count = serializers.IntegerField(read_only=True, default=0)
+
+    class Meta:
+        model = TransactionModel
+        fields: tuple[str, ...] = (
+            "id",
+            "trace_id",
+            "span_id",
+            "name",
+            "op",
+            "status",
+            "start_timestamp",
+            "timestamp",
+            "duration_ms",
+            "environment",
+            "release",
+            "span_count",
+        )
+
+
+class TraceDetailSerializer(TransactionSerializer):
+    spans = SpanSerializer(many=True, read_only=True)
+
+    class Meta(TransactionSerializer.Meta):
+        fields = (
+            "id",
+            "trace_id",
+            "span_id",
+            "name",
+            "op",
+            "status",
+            "start_timestamp",
+            "timestamp",
+            "duration_ms",
+            "environment",
+            "release",
+            "span_count",
+            "spans",
         )
