@@ -5,7 +5,7 @@ description = "Obsly ingest and API server"
 requires-python = ">=3.12"
 dependencies = [
     "django>=6.1,<7",
-    "djangorestframework>=3.17",
+    "djangorestframework>=3.18",
     "psycopg[binary]>=3.3",
     "django-environ>=0.12",
     # Runtime, not dev: settings.py calls monkeypatch() so admin generics work at import time.

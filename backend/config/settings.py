@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     "apps.events",
     "apps.issues",
     "apps.ingest",
+    "apps.api",
 ]
 
 MIDDLEWARE = [

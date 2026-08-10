@@ -1,51 +1,54 @@
 import { useEffect, useState } from 'react'
+import { Link, Navigate, Route, Routes } from 'react-router-dom'
 
-export interface Health {
-  status: string
-  database: string
-}
+import { api } from './api'
+import { IssueDetailPage } from './pages/IssueDetailPage'
+import { Notice } from './components/Notice'
+import { Issues } from './pages/Issues'
 
-type State =
-  { kind: 'loading' } | { kind: 'ready'; health: Health } | { kind: 'error'; message: string }
+type Auth = { state: 'loading' } | { state: 'in'; username: string } | { state: 'out' }
 
-/**
- * Placeholder shell. Its only job today is to prove the frontend can reach the backend —
- * the issue stream replaces it in `feat/web-issues`.
- */
 export function App() {
-  const [state, setState] = useState<State>({ kind: 'loading' })
+  const [auth, setAuth] = useState<Auth>({ state: 'loading' })
 
   useEffect(() => {
-    const controller = new AbortController()
-
-    fetch('/health/', { signal: controller.signal })
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error(`backend returned ${response.status}`)
-        }
-        return response.json() as Promise<Health>
-      })
-      .then((health) => setState({ kind: 'ready', health }))
-      .catch((error: Error) => {
-        // An abort is the component unmounting, not a failure worth rendering.
-        if (error.name !== 'AbortError') {
-          setState({ kind: 'error', message: error.message })
-        }
-      })
-
-    return () => controller.abort()
+    api
+      .me()
+      .then(({ username }) => setAuth({ state: 'in', username }))
+      .catch(() => setAuth({ state: 'out' }))
   }, [])
 
   return (
-    <main>
-      <h1>Obsly</h1>
-      {state.kind === 'loading' && <p role="status">Checking backend…</p>}
-      {state.kind === 'ready' && (
-        <p role="status">
-          Backend {state.health.status}, database {state.health.database}
-        </p>
-      )}
-      {state.kind === 'error' && <p role="alert">Backend unreachable: {state.message}</p>}
-    </main>
+    <div className="app">
+      <header className="topbar">
+        <Link to="/" className="topbar__brand">
+          Obsly
+        </Link>
+        <div className="topbar__spacer" />
+        {auth.state === 'in' && <span className="topbar__user">{auth.username}</span>}
+      </header>
+
+      <main className="content">
+        {auth.state === 'loading' && <Notice>Checking session…</Notice>}
+
+        {auth.state === 'out' && (
+          <Notice>
+            <strong>Sign in to continue</strong>
+            The UI reads through the same session as the admin. Authentication of its own arrives in
+            a later change — until then, <a href="/admin/login/?next=/">sign in here</a> and come
+            back.
+          </Notice>
+        )}
+
+        {auth.state === 'in' && (
+          <Routes>
+            <Route path="/" element={<Issues />} />
+            <Route path="/projects/:projectId/issues" element={<Issues />} />
+            <Route path="/issues/:issueId" element={<IssueDetailPage />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        )}
+      </main>
+    </div>
   )
 }

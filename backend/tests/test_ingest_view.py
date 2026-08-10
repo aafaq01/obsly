@@ -1,14 +1,13 @@
 import json
-from typing import Any, cast
+from typing import Any
 
 import pytest
-from django.http import HttpResponse
 from django.test import Client, override_settings
 from django.urls import reverse
 
 from apps.events.models import Event
 from apps.projects.models import Organization, Project, ProjectKey
-from tests.conftest import build_envelope
+from tests.conftest import build_envelope, json_body, post
 
 pytestmark = pytest.mark.django_db
 
@@ -23,31 +22,8 @@ ERROR_PAYLOAD: dict[str, Any] = {
 }
 
 
-def json_body(response: HttpResponse) -> dict[str, Any]:
-    """django-stubs types the test client as HttpResponse, which has no .json()."""
-    return json.loads(response.content)  # type: ignore[no-any-return]
-
-
 def url(project: Project) -> str:
     return reverse("ingest:envelope", args=[project.pk])
-
-
-def post(client: Client, project: Project, body: bytes, key: str | None = None) -> HttpResponse:
-    headers = {"X-Obsly-Key": key} if key else {}
-    return cast(
-        HttpResponse,
-        client.post(
-            url(project),
-            data=body,
-            content_type="application/x-obsly-envelope",
-            headers=headers,
-            # secure=True because ingest is deliberately NOT exempt from SECURE_SSL_REDIRECT.
-            # Health is exempt so cluster probes work; ingest is not, because it carries user
-            # payloads and must never be accepted over plaintext. Tests use the transport
-            # production uses.
-            secure=True,
-        ),
-    )
 
 
 class TestAuthentication:

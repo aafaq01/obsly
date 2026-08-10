@@ -6,9 +6,12 @@ before any conftest is imported, so a conftest is too late to influence settings
 
 import json
 import uuid
-from typing import Any
+from typing import Any, cast
 
 import pytest
+from django.http import HttpResponse
+from django.test import Client
+from django.urls import reverse
 
 from apps.projects.models import Organization, Project, ProjectKey
 
@@ -53,3 +56,33 @@ def build_envelope(
         lines.append(body)
 
     return b"\n".join(lines) + b"\n"
+
+
+def json_body(response: Any) -> Any:
+    """Read a JSON response body.
+
+    Deliberately Any: django-stubs types the test client's return as a private
+    _MonkeyPatchedWSGIResponse that is not assignable to HttpResponse, and pinning a test
+    helper to a stub-internal name breaks on every stubs upgrade.
+    """
+    return json.loads(response.content)
+
+
+def post(client: Client, project: Project, body: bytes, key: str | None = None) -> HttpResponse:
+    """POST an envelope over HTTPS.
+
+    secure=True because ingest is deliberately NOT exempt from SECURE_SSL_REDIRECT: health is
+    exempt so cluster probes work, ingest carries user payloads and must never be accepted over
+    plaintext. Tests use the transport production uses.
+    """
+    headers = {"X-Obsly-Key": key} if key else {}
+    return cast(
+        HttpResponse,
+        client.post(
+            reverse("ingest:envelope", args=[project.pk]),
+            data=body,
+            content_type="application/x-obsly-envelope",
+            headers=headers,
+            secure=True,
+        ),
+    )
