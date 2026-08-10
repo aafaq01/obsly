@@ -297,3 +297,129 @@ describe('StatusActions', () => {
     expect(screen.getByText(/returned 500/)).toBeInTheDocument()
   })
 })
+
+describe('Project settings', () => {
+  const DETAIL = {
+    ...PROJECT,
+    keys: [
+      {
+        id: 3,
+        label: 'default',
+        public_key: 'abc123',
+        dsn: 'http://abc123@localhost:8081/1',
+        is_active: true,
+        created_at: new Date().toISOString(),
+      },
+    ],
+  }
+
+  function renderSettings() {
+    return render(
+      <MemoryRouter initialEntries={['/projects/1/settings']}>
+        <App />
+      </MemoryRouter>,
+    )
+  }
+
+  it('shows the DSN so nobody has to open the admin for it', async () => {
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/1/': { body: DETAIL },
+    })
+
+    renderSettings()
+
+    expect(await screen.findByText('http://abc123@localhost:8081/1')).toBeInTheDocument()
+  })
+
+  it('includes a copy-paste install snippet carrying the DSN', async () => {
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/1/': { body: DETAIL },
+    })
+
+    renderSettings()
+
+    const snippet = await screen.findByText(/ObslyMiddleware/)
+    expect(snippet).toHaveTextContent('http://abc123@localhost:8081/1')
+  })
+
+  it('warns when no key is active, because the project cannot receive events', async () => {
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/1/': {
+        body: { ...DETAIL, keys: [{ ...DETAIL.keys[0], is_active: false }] },
+      },
+    })
+
+    renderSettings()
+
+    expect(await screen.findByText(/No active key/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Restore' })).toBeInTheDocument()
+  })
+
+  it('revokes a key', async () => {
+    const fetchMock = mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/1/': { body: DETAIL },
+      '/keys/3/': { body: { ...DETAIL.keys[0], is_active: false } },
+    })
+
+    renderSettings()
+    await userEvent.click(await screen.findByRole('button', { name: 'Revoke' }))
+
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find((c) => String(c[0]).includes('/keys/3/'))
+      expect(call?.[1]?.method).toBe('PATCH')
+    })
+    expect(await screen.findByRole('button', { name: 'Restore' })).toBeInTheDocument()
+  })
+})
+
+describe('Projects page', () => {
+  it('creates an organization first when there are none', async () => {
+    // Otherwise a first-run install is a dead end: you must create an org you cannot see a
+    // reason for before you can create the project you came for.
+    const fetchMock = mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/organizations/': { body: [] },
+      '/projects/': { body: [] },
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/projects']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    await userEvent.click(await screen.findByRole('button', { name: 'New project' }))
+    await userEvent.type(screen.getByLabelText('Project name'), 'My Service')
+    await userEvent.click(screen.getByRole('button', { name: 'Create' }))
+
+    await waitFor(() => {
+      const orgPost = fetchMock.mock.calls.find(
+        (c) => String(c[0]).includes('/organizations/') && c[1]?.method === 'POST',
+      )
+      expect(orgPost).toBeDefined()
+    })
+  })
+
+  it('derives a slug from the project name', async () => {
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/organizations/': { body: [{ id: 1, name: 'Acme', slug: 'acme' }] },
+      '/projects/': { body: [] },
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/projects']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    await userEvent.click(await screen.findByRole('button', { name: 'New project' }))
+    await userEvent.type(screen.getByLabelText('Project name'), 'Checkout API!!')
+
+    expect(await screen.findByText('slug: checkout-api')).toBeInTheDocument()
+  })
+})
