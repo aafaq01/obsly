@@ -93,6 +93,42 @@ jobs:
       - name: Build
         run: npm run build
 
+  sdk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdk/python
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: sdk/python/uv.lock
+
+      - run: uv sync --locked
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Format
+        run: uv run ruff format --check .
+
+      - name: Types
+        run: uv run mypy obsly
+
+      - name: Tests
+        run: uv run pytest
+
+      - name: No runtime dependencies
+        run: |
+          # The SDK's whole promise is that adding it cannot break the application it observes
+          # through a version conflict. A dependency creeping in silently voids that.
+          deps=$(uv run python -c "import tomllib,pathlib;print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['dependencies'])")
+          echo "declared runtime dependencies: $deps"
+          test "$deps" = "[]"
+
   stack:
     # The README promises `docker compose up` works. Without this job that promise rots the
     # first time someone edits a Dockerfile, and nobody finds out until they try to run it.
