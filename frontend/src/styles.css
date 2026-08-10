@@ -672,7 +672,7 @@ pre.raw {
   align-items: flex-end;
   /* 2px surface gap between adjacent bars, per the mark spec. */
   gap: 2px;
-  height: 120px;
+  height: 84px;
   flex: 1;
 }
 
@@ -709,6 +709,9 @@ pre.raw {
 
 .chart2 {
   margin: 0;
+  /* Capped. Stretched across a full-width page, 24 buckets produce bars so wide and so far
+     apart that the shape of the data disappears into the gaps. */
+  max-width: 560px;
 }
 
 .chart2__readout {
@@ -918,4 +921,166 @@ pre.raw {
   text-align: right;
   font-variant-numeric: tabular-nums;
   color: var(--ink-secondary);
+}
+
+/* --- issue detail: density ------------------------------------------------ */
+
+.crumb {
+  margin: 0 0 10px;
+  font-size: 13px;
+}
+
+.crumb a {
+  color: var(--series-1);
+}
+
+.detail-header {
+  margin-bottom: 14px;
+}
+
+.detail-title {
+  font-size: 19px;
+  /* The exception message can be a whole SQL statement. Cap it at three lines so it cannot
+     push the stack trace below the fold. */
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Reference values, one dense line — not a row of hero numbers competing with the title. */
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 26px;
+  margin: 0 0 20px;
+  padding: 10px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.meta__item {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+}
+
+.meta dt {
+  font-size: 11px;
+  color: var(--ink-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.meta dd {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+/* Stack trace gets the width; everything else is reference material beside it. */
+.issue-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 24px;
+  align-items: start;
+}
+
+.issue-grid__main > section,
+.issue-grid__side > section {
+  margin-bottom: 18px;
+}
+
+.issue-grid__main {
+  min-width: 0;
+}
+
+.card--tight {
+  padding: 12px;
+}
+
+.exc {
+  margin-bottom: 14px;
+}
+
+.exc__head {
+  margin: 0 0 7px;
+  font-size: 13px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.exc__type {
+  font-weight: 650;
+}
+
+.exc__value {
+  color: var(--ink-secondary);
+  overflow-wrap: anywhere;
+}
+
+.exc__chain {
+  color: var(--ink-muted);
+  font-size: 12px;
+}
+
+.frame__where {
+  overflow-wrap: anywhere;
+}
+
+/* Collapsed by default — a debugging escape hatch, not the page. */
+.collapse {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  margin-bottom: 18px;
+}
+
+.collapse > summary {
+  cursor: pointer;
+  padding: 10px 14px;
+  font-size: 12px;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-secondary);
+  list-style: none;
+}
+
+.collapse > summary::-webkit-details-marker {
+  display: none;
+}
+
+.collapse > summary::before {
+  content: '▸ ';
+  color: var(--ink-muted);
+}
+
+.collapse[open] > summary::before {
+  content: '▾ ';
+}
+
+.collapse > summary:hover {
+  color: var(--series-1);
+}
+
+.collapse .raw {
+  border: none;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  margin: 0;
+  max-height: 320px;
+}
+
+.collapse .frames {
+  border-top: 1px solid var(--border);
+}
+
+@media (max-width: 900px) {
+  .issue-grid {
+    grid-template-columns: 1fr;
+  }
 }

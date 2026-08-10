@@ -554,3 +554,90 @@ describe('Performance page', () => {
     })
   })
 })
+
+describe('Issue detail layout', () => {
+  const DETAIL = {
+    issue: { ...ISSUE, fingerprint: 'abc', fingerprint_components: ['ValueError', 'app.crud:get'] },
+    latest_event: {
+      id: '6ba7b810-9dad-11d1-80b4-00c04fd430c8',
+      timestamp: new Date().toISOString(),
+      received_at: new Date().toISOString(),
+      level: 'error',
+      platform: 'python',
+      message: '',
+      exception_type: 'ValueError',
+      exception_value: 'cart is empty',
+      culprit: 'app.crud in get_cart',
+      environment: 'production',
+      release: 'checkout@1.4.2',
+      server_name: 'web-1',
+      tags: {},
+      exception: [
+        {
+          type: 'ValueError',
+          value: 'cart is empty',
+          frames: [
+            {
+              filename: 'a.py',
+              module: 'app.crud',
+              function: 'get_cart',
+              lineno: 42,
+              in_app: true,
+            },
+            { filename: 'b.py', module: 'lib.orm', function: 'execute', lineno: 9, in_app: false },
+          ],
+        },
+      ],
+      payload: { huge: 'x'.repeat(500) },
+    },
+    tags: {},
+  }
+
+  function renderIssue() {
+    return render(
+      <MemoryRouter initialEntries={['/issues/9']}>
+        <App />
+      </MemoryRouter>,
+    )
+  }
+
+  it('keeps the raw payload collapsed so it cannot push the stack trace off screen', async () => {
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/issues/9/': { body: DETAIL },
+    })
+
+    renderIssue()
+
+    const payload = await screen.findByText('Raw payload')
+    expect(payload.closest('details')).not.toHaveAttribute('open')
+  })
+
+  it('shows reference values inline rather than as hero tiles', async () => {
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/issues/9/': { body: DETAIL },
+    })
+
+    renderIssue()
+
+    expect(await screen.findByText('Events')).toBeInTheDocument()
+    expect(screen.getByText('checkout@1.4.2')).toBeInTheDocument()
+    expect(screen.getByText('production')).toBeInTheDocument()
+  })
+
+  it('hides system frames behind a count by default', async () => {
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/issues/9/': { body: DETAIL },
+    })
+
+    renderIssue()
+
+    // Queried by function name: the module sits in a text node beside a <strong>, so a
+    // whole-string matcher never matches.
+    expect(await screen.findByText('get_cart')).toBeInTheDocument()
+    expect(screen.queryByText('execute')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /1 more system frame/ })).toBeInTheDocument()
+  })
+})
