@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     "rest_framework",
     "apps.projects",
     "apps.events",
+    "apps.issues",
     "apps.ingest",
 ]
 
