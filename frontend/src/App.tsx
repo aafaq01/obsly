@@ -6,6 +6,7 @@ import { IssueDetailPage } from './pages/IssueDetailPage'
 import { Notice } from './components/Notice'
 import { Issues } from './pages/Issues'
 import { Login } from './pages/Login'
+import { Performance } from './pages/Performance'
 import { ProjectSettings } from './pages/ProjectSettings'
 import { Projects } from './pages/Projects'
 
@@ -66,6 +67,7 @@ export function App() {
             <Route path="/projects/:projectId/issues" element={<Issues />} />
             <Route path="/issues/:issueId" element={<IssueDetailPage />} />
             <Route path="/projects" element={<Projects />} />
+            <Route path="/projects/:projectId/performance" element={<Performance />} />
             <Route path="/projects/:projectId/settings" element={<ProjectSettings />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

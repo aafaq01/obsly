@@ -19,6 +19,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from apps.api.performance import endpoint_summary, window
 from apps.api.serializers import (
     EventSerializer,
     IssueDetailSerializer,
@@ -31,6 +32,7 @@ from apps.api.serializers import (
 from apps.events.models import Event
 from apps.issues.models import Issue, IssueStatus
 from apps.projects.models import Organization, Project, ProjectKey
+from apps.tracing.models import Transaction
 
 HOURS = 24
 
@@ -96,6 +98,56 @@ class ProjectKeyUpdateView(generics.UpdateAPIView[ProjectKey]):
     serializer_class = ProjectKeySerializer
     queryset = ProjectKey.objects.all()
     http_method_names = ["patch"]
+
+
+class PerformanceView(APIView):
+    """Latency and throughput per endpoint.
+
+    Percentiles rather than averages: an endpoint answering 99% of requests in 20ms and 1% in
+    8 seconds averages out to something that looks healthy, while the p99 says plainly that one
+    request in a hundred is unusable.
+    """
+
+    def get(self, request: Request, project_id: int) -> Response:
+        get_object_or_404(Project, pk=project_id)
+        period = request.query_params.get("period", "24h")
+        since, minutes = window(period)
+
+        endpoints = endpoint_summary(project_id, period)
+        totals = Transaction.objects.filter(project_id=project_id, timestamp__gte=since)
+
+        return Response(
+            {
+                "period": period,
+                "endpoints": endpoints,
+                "summary": {
+                    "transactions": sum(row["count"] for row in endpoints),
+                    "throughput_per_minute": round(
+                        sum(row["count"] for row in endpoints) / minutes, 3
+                    ),
+                    "failure_rate": _overall_failure_rate(endpoints),
+                    "hourly": _hourly_throughput(totals, since),
+                },
+            }
+        )
+
+
+def _overall_failure_rate(endpoints: list[dict[str, Any]]) -> float:
+    total = sum(row["count"] for row in endpoints)
+    if not total:
+        return 0.0
+    failures = sum(row["count"] * row["failure_rate"] for row in endpoints)
+    return float(round(failures / total, 4))
+
+
+def _hourly_throughput(queryset: QuerySet[Transaction], since: datetime) -> list[int]:
+    """Zero-filled buckets, so a quiet hour is a gap in the chart rather than a missing bar."""
+    rows = queryset.annotate(hour=TruncHour("timestamp")).values("hour").annotate(count=Count("id"))
+    counts = {row["hour"]: row["count"] for row in rows}
+
+    start = since.replace(minute=0, second=0, microsecond=0)
+    buckets = int((datetime.now(tz=UTC) - start).total_seconds() // 3600) + 1
+    return [counts.get(start + timedelta(hours=offset), 0) for offset in range(max(buckets, 1))]
 
 
 class IssueListView(generics.ListAPIView[Issue]):
