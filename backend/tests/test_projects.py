@@ -6,16 +6,6 @@ from apps.projects.models import Organization, Project, ProjectKey, generate_pub
 pytestmark = pytest.mark.django_db
 
 
-@pytest.fixture
-def organization() -> Organization:
-    return Organization.objects.create(name="Acme", slug="acme")
-
-
-@pytest.fixture
-def project(organization: Organization) -> Project:
-    return Project.objects.create(organization=organization, name="Checkout", slug="checkout")
-
-
 class TestPublicKey:
     def test_is_32_hex_characters(self) -> None:
         key = generate_public_key()

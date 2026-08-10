@@ -41,6 +41,8 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "rest_framework",
     "apps.projects",
+    "apps.events",
+    "apps.ingest",
 ]
 
 MIDDLEWARE = [
@@ -113,6 +115,11 @@ STORAGES = {
 # The origin SDKs should send to, used to render DSNs. Not derivable from a request: the host an
 # operator browses the admin on is not necessarily the host their services can reach.
 OBSLY_INGEST_ORIGIN = env("OBSLY_INGEST_ORIGIN", default="http://localhost:8081")
+
+# Hard ceiling on a single envelope. The endpoint is public and authenticated only by a
+# write-only key, so an unbounded body is an unbounded memory allocation for anyone holding one.
+# nginx enforces its own client_max_body_size above this; both limits are deliberate.
+OBSLY_MAX_ENVELOPE_BYTES = env.int("OBSLY_MAX_ENVELOPE_BYTES", default=1_000_000)
 
 # --- REST framework ---------------------------------------------------------
 
