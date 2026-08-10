@@ -7,7 +7,12 @@ Split it when two environments genuinely need different INSTALLED_APPS, not befo
 
 from pathlib import Path
 
+import django_stubs_ext
 import environ
+
+# Makes ModelAdmin[Model] and friends subscriptable at runtime. Without it those annotations are
+# a TypeError on import, and dropping them instead would fail mypy's strict disallow_any_generics.
+django_stubs_ext.monkeypatch()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -35,6 +40,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
+    "apps.projects",
 ]
 
 MIDDLEWARE = [
@@ -101,6 +107,12 @@ STORAGES = {
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
     "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
 }
+
+# --- Obsly -------------------------------------------------------------------
+
+# The origin SDKs should send to, used to render DSNs. Not derivable from a request: the host an
+# operator browses the admin on is not necessarily the host their services can reach.
+OBSLY_INGEST_ORIGIN = env("OBSLY_INGEST_ORIGIN", default="http://localhost:8081")
 
 # --- REST framework ---------------------------------------------------------
 
