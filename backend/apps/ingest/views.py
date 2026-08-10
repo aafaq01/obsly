@@ -22,11 +22,14 @@ from apps.events.models import Event
 from apps.ingest import envelope as envelope_parser
 from apps.ingest.auth import AuthenticationError, authenticate
 from apps.ingest.normalize import event_from_payload
+from apps.ingest.transactions import transaction_from_payload
 from apps.issues.grouping import assign_issues
+from apps.tracing.models import Span, Transaction
 
 logger = logging.getLogger(__name__)
 
 EVENT_ITEM = "event"
+TRANSACTION_ITEM = "transaction"
 
 
 @csrf_exempt  # SDKs are not browsers with our cookies; the DSN key is the credential.
@@ -68,7 +71,29 @@ def envelope(request: HttpRequest, project_id: int) -> JsonResponse:
             )
         )
 
+    transactions: list[Transaction] = []
+    spans: list[Span] = []
+
+    for item in parsed.items_of_type(TRANSACTION_ITEM):
+        try:
+            payload = item.json()
+        except envelope_parser.EnvelopeError as exc:
+            rejected.append({"type": item.type, "reason": str(exc)})
+            continue
+
+        built = transaction_from_payload(
+            key.project, payload, now=now, envelope_event_id=parsed.headers.get("event_id")
+        )
+        if built is None:
+            rejected.append({"type": item.type, "reason": "unusable transaction"})
+            continue
+
+        transaction, transaction_spans = built
+        transactions.append(transaction)
+        spans.extend(transaction_spans)
+
     stored = _store(events)
+    stored_transactions = _store_transactions(transactions, spans)
 
     try:
         assign_issues(stored)
@@ -84,12 +109,38 @@ def envelope(request: HttpRequest, project_id: int) -> JsonResponse:
 
     return JsonResponse(
         {
-            "accepted": len(stored),
+            "accepted": len(stored) + len(stored_transactions),
             "rejected": rejected,
             "event_ids": [str(event.pk) for event in stored],
+            "transaction_ids": [str(txn.pk) for txn in stored_transactions],
         },
         status=200,
     )
+
+
+@transaction.atomic
+def _store_transactions(transactions: list[Transaction], spans: list[Span]) -> list[Transaction]:
+    """Transactions first, then their spans.
+
+    A span whose transaction was ignored as a duplicate would be an orphan pointing at a row
+    that already has its own copy of it, so the same envelope replayed would grow the span
+    table without adding information.
+    """
+    if not transactions:
+        return []
+
+    created = Transaction.objects.bulk_create(transactions, ignore_conflicts=True)
+    kept = set(
+        Transaction.objects.filter(pk__in=[txn.pk for txn in transactions]).values_list(
+            "pk", flat=True
+        )
+    )
+    if spans and Span.objects.filter(transaction_id__in=kept).exists():
+        # Already stored by an earlier delivery of this envelope.
+        return created
+
+    Span.objects.bulk_create([span for span in spans if span.transaction.pk in kept])
+    return created
 
 
 @transaction.atomic
