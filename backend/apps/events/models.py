@@ -27,6 +27,12 @@ class Event(TimestampedModel):
 
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="events")
 
+    # Nullable: the event is stored first and grouped after, so a failure in fingerprinting
+    # costs the grouping, never the event itself.
+    issue = models.ForeignKey(
+        "issues.Issue", on_delete=models.CASCADE, related_name="events", null=True, blank=True
+    )
+
     # When the client says it happened, versus when we received it. They differ under clock
     # skew and offline buffering, and conflating them makes an outage timeline unreadable.
     timestamp = models.DateTimeField(db_index=True)
@@ -52,6 +58,8 @@ class Event(TimestampedModel):
         indexes = [
             # The issue stream's default query: this project, newest first.
             models.Index(fields=["project", "-timestamp"], name="event_project_recent"),
+            # The issue detail page's only query: this issue's events, newest first.
+            models.Index(fields=["issue", "-timestamp"], name="event_issue_recent"),
         ]
 
     def __str__(self) -> str:

@@ -22,6 +22,7 @@ from apps.events.models import Event
 from apps.ingest import envelope as envelope_parser
 from apps.ingest.auth import AuthenticationError, authenticate
 from apps.ingest.normalize import event_from_payload
+from apps.issues.grouping import assign_issues
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +69,13 @@ def envelope(request: HttpRequest, project_id: int) -> JsonResponse:
         )
 
     stored = _store(events)
+
+    try:
+        assign_issues(stored)
+    except Exception:
+        # Grouping runs after storage precisely so this is survivable. An ungrouped event is
+        # still queryable and can be regrouped later; a lost event is gone.
+        logger.exception("ingest: grouping failed for project %s", project_id)
 
     if rejected:
         logger.warning(
