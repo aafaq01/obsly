@@ -117,6 +117,37 @@ jobs:
           echo "--- admin, proving migrations ran and whitenoise serves static ---"
           curl -sf -o /dev/null -w '%{http_code}\n' http://localhost:8081/admin/login/ | grep -q 200
 
+      - name: POST through nginx with a browser Origin header
+        run: |
+          set -euo pipefail
+          # A plain curl POST omits Origin and passes even when the proxy mangles Host, which is
+          # how a CSRF failure reached a browser while CI stayed green. Send Origin like a
+          # browser does, and require anything except 403.
+          docker compose exec -T \
+            -e DJANGO_SUPERUSER_USERNAME=citest \
+            -e DJANGO_SUPERUSER_EMAIL=ci@example.com \
+            -e DJANGO_SUPERUSER_PASSWORD=ci-test-password \
+            backend python manage.py createsuperuser --noinput
+
+          jar=$(mktemp)
+          token=$(curl -sf -c "$jar" http://localhost:8081/admin/login/ \
+            | sed -n 's/.*name="csrfmiddlewaretoken" value="\([^"]*\)".*/\1/p' | head -1)
+          test -n "$token"
+
+          code=$(curl -s -b "$jar" -c "$jar" -o /dev/null -w '%{http_code}' \
+            -X POST \
+            -H 'Origin: http://localhost:8081' \
+            -e http://localhost:8081/admin/login/ \
+            -d "username=citest&password=ci-test-password&csrfmiddlewaretoken=$token" \
+            http://localhost:8081/admin/login/)
+
+          echo "login with Origin -> HTTP $code"
+          if [ "$code" = "403" ]; then
+            echo "CSRF rejected the browser Origin — the proxy is not forwarding Host with its port"
+            exit 1
+          fi
+          test "$code" = "302"
+
       - name: Dump logs on failure
         if: failure()
         run: docker compose logs --no-color --tail 100
