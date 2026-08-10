@@ -1,4 +1,5 @@
 import json
+import logging
 from typing import Any
 
 import pytest
@@ -9,6 +10,7 @@ import obsly
 from obsly import dsn as dsn_module
 from obsly.client import Client
 from obsly.integrations.fastapi import ObslyMiddleware
+from obsly.logs import LogBuffer, ObslyLogHandler
 from obsly.stacktrace import exception_chain
 from obsly.transport import build_envelope
 
@@ -471,3 +473,145 @@ class TestErrorTraceCorrelation:
 
         errors = [e for e in transport.events() if e.get("type") != "transaction"]
         assert errors[0]["contexts"]["trace"]["span_id"] == inner
+
+
+class TestLogs:
+    def logs(self, transport: FakeTransport) -> list[dict[str, Any]]:
+        records = []
+        for raw in transport.sent:
+            lines = raw.strip().split(b"\n")
+            payload = json.loads(lines[2])
+            records.extend(payload.get("items", []))
+        return records
+
+    def test_logs_are_off_unless_enabled(self, transport: FakeTransport) -> None:
+        """Logs are the highest-volume signal by far. Turning that on must be a decision."""
+        client = Client(DSN, transport=transport)  # type: ignore[arg-type]
+
+        client.capture_log("info", "hello")
+        client.flush()
+
+        assert self.logs(transport) == []
+
+    def test_records_are_batched_not_sent_one_by_one(self, transport: FakeTransport) -> None:
+        """One HTTP request per line would make logging the slowest thing an app does."""
+        client = Client(DSN, transport=transport, enable_logs=True)  # type: ignore[arg-type]
+
+        for index in range(5):
+            client.capture_log("info", f"line {index}")
+
+        assert transport.sent == []
+
+        client.flush()
+        assert len(transport.sent) == 1
+        assert len(self.logs(transport)) == 5
+
+    def test_flush_drains_buffered_logs(self, transport: FakeTransport) -> None:
+        """A process exiting cleanly must not lose what it said in the last few seconds."""
+        client = Client(DSN, transport=transport, enable_logs=True)  # type: ignore[arg-type]
+        client.capture_log("warning", "about to exit")
+
+        client.flush()
+
+        assert self.logs(transport)[0]["body"] == "about to exit"
+
+    def test_a_log_inside_a_transaction_carries_its_trace(self, transport: FakeTransport) -> None:
+        client = Client(  # type: ignore[arg-type]
+            DSN, transport=transport, enable_logs=True, traces_sample_rate=1.0
+        )
+
+        with client.start_transaction("/checkout", "http.server") as transaction:
+            client.capture_log("info", "cart loaded")
+        client.flush()
+
+        assert self.logs(transport)[0]["trace_id"] == transaction.trace_id
+
+    def test_a_successful_request_still_logs(self, transport: FakeTransport) -> None:
+        """The point of the success case: most requests succeed, and the explanation for the
+        ones that do not usually lives in them."""
+        client = Client(  # type: ignore[arg-type]
+            DSN, transport=transport, enable_logs=True, traces_sample_rate=1.0
+        )
+
+        with client.start_transaction("/healthz", "http.server") as transaction:
+            client.capture_log("info", "all good")
+        client.flush()
+
+        assert transaction.status == "ok"
+        assert self.logs(transport)[0]["body"] == "all good"
+
+    def test_the_buffer_empties_at_capacity_so_it_cannot_grow(self) -> None:
+        """A burst of logs must cost truncated telemetry, not the memory of the process. The
+        buffer bounds itself by emptying; the transport queue is what drops under real
+        pressure."""
+        buffer = LogBuffer(capacity=10)
+        batches = [buffer.add({"body": str(index)}) for index in range(500)]
+
+        assert len([b for b in batches if b]) == 50
+        assert len(buffer.drain()) == 0
+
+    def test_stdlib_handler_forwards_existing_log_calls(self, transport: FakeTransport) -> None:
+        """An SDK that only sees logs written specially for it sees the least interesting ones."""
+        obsly.client._client = Client(DSN, transport=transport, enable_logs=True)  # type: ignore[arg-type]
+
+        stdlib = logging.getLogger("app.billing")
+        stdlib.setLevel(logging.INFO)
+        handler = ObslyLogHandler()
+        stdlib.addHandler(handler)
+        try:
+            stdlib.warning("card declined for %s", "order-7")
+        finally:
+            stdlib.removeHandler(handler)
+
+        obsly.client._client.flush()
+
+        [record] = self.logs(transport)
+        assert record["level"] == "warning"
+        assert record["body"] == "card declined for order-7"
+        assert record["logger"] == "app.billing"
+        # The un-interpolated template is kept: it groups, the formatted string does not.
+        assert record["attributes"]["template"] == "card declined for %s"
+
+    def test_the_handler_never_raises_into_the_application(
+        self, transport: FakeTransport, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A logging handler that raises turns every log call into a failure."""
+        obsly.client._client = Client(DSN, transport=transport, enable_logs=True)  # type: ignore[arg-type]
+        monkeypatch.setattr(obsly.client._client, "capture_log", _raise, raising=True)
+
+        stdlib = logging.getLogger("app.hostile")
+        handler = ObslyLogHandler()
+        handler.handleError = lambda record: None  # type: ignore[method-assign]
+        stdlib.addHandler(handler)
+        try:
+            stdlib.error("this must not blow up")
+        finally:
+            stdlib.removeHandler(handler)
+
+
+def _raise(*args: Any, **kwargs: Any) -> None:
+    raise RuntimeError("transport exploded")
+
+
+class TestLogFlusher:
+    def test_a_stale_batch_is_flushed_without_another_log_call(
+        self, transport: FakeTransport
+    ) -> None:
+        """The buffer's age check only runs on add(). Without a background flusher the last
+        lines of a burst sit stranded until the application happens to log again — and the end
+        of a burst is usually the part worth reading."""
+        client = Client(DSN, transport=transport, enable_logs=True)  # type: ignore[arg-type]
+        client.capture_log("info", "last thing before it went quiet")
+        assert transport.sent == []
+
+        # Drive the loop body directly rather than sleeping: a test that waits on a real
+        # 2-second interval is a test that makes the suite slower for everyone.
+        client._send_logs(client._logs.drain())
+
+        assert transport.sent != []
+
+    def test_the_flusher_thread_only_runs_when_logs_are_enabled(
+        self, transport: FakeTransport
+    ) -> None:
+        assert Client(DSN, transport=transport)._flusher is None  # type: ignore[arg-type]
+        assert Client(DSN, transport=transport, enable_logs=True)._flusher is not None  # type: ignore[arg-type]

@@ -12,6 +12,7 @@ grouping, correlation and percentile behaviour can be seen rather than described
 Every endpoint here is a deliberate failure. Nothing in this file is an example of good code.
 """
 
+import logging
 import random
 import time
 
@@ -23,7 +24,15 @@ obsly.init(
     release="obsly-demo@1.3.0",
     environment="production",
     traces_sample_rate=1.0,
+    enable_logs=True,
 )
+
+# Forward the logging calls this app already makes. Nothing below is written specially for
+# Obsly — it is ordinary logging, which is the point.
+logging.basicConfig(level=logging.INFO)
+logging.getLogger().addHandler(obsly.ObslyLogHandler())
+
+log = logging.getLogger("demo")
 
 app = FastAPI(title="Obsly demo")
 app.add_middleware(ObslyMiddleware)
@@ -33,12 +42,15 @@ CART: dict[str, list[dict[str, float]]] = {"c-1": [{"price": 9.99}]}
 
 @app.get("/")
 def index() -> dict[str, str]:
+    log.info("index served")
     return {"status": "ok"}
 
 
 @app.get("/checkout/{cart_id}")
 def checkout(cart_id: str) -> dict[str, float]:
     """Two different bugs behind one route, so grouping has to tell them apart."""
+    log.info("checkout started for cart %s", cart_id)
+
     with obsly.start_span("db.query", "SELECT * FROM carts WHERE id = %s"):
         time.sleep(random.uniform(0.004, 0.02))
         items = CART.get(cart_id)
@@ -52,11 +64,16 @@ def checkout(cart_id: str) -> dict[str, float]:
         time.sleep(random.uniform(0.002, 0.01))
 
     with obsly.start_span("http.client", "POST payments.example.com/charge"):
+        log.info("charging card for cart %s", cart_id)
         time.sleep(random.uniform(0.05, 0.4))
         if random.random() < 0.5:
             raise ConnectionError("payments.example.com returned 502")
 
-    return {"total": sum(item["price"] for item in items)}
+    total = sum(item["price"] for item in items)
+    # The success path logs too. Most requests succeed, and the explanation for the ones that
+    # do not usually lives in what the successful ones were doing.
+    log.info("checkout complete for cart %s, total %.2f", cart_id, total)
+    return {"total": total}
 
 
 @app.get("/orders/{order_id}")
@@ -96,6 +113,7 @@ def search(q: str = "") -> dict[str, list[str]]:
         q = q[:50]
 
     with obsly.start_span("cache.get", "search:results"):
+        log.debug("search cache miss for %r", q)
         time.sleep(0.001)
 
     if not q:
@@ -118,5 +136,6 @@ def legacy() -> dict[str, str]:
 def slow() -> dict[str, str]:
     """Succeeds, but slowly — so the percentiles have a visible tail to show."""
     with obsly.start_span("db.query", "SELECT * FROM analytics_rollup"):
+        log.warning("analytics rollup is being computed on the request path")
         time.sleep(random.uniform(0.3, 1.2))
     return {"status": "eventually"}

@@ -5,6 +5,7 @@ from rest_framework import serializers
 
 from apps.events.models import Event
 from apps.issues.models import Issue
+from apps.logs.models import LogRecord
 from apps.projects.models import Organization, Project, ProjectKey
 from apps.tracing.models import Span
 from apps.tracing.models import Transaction as TransactionModel
@@ -253,3 +254,20 @@ class CorrelatedErrorSerializer(serializers.ModelSerializer[Event]):
     class Meta:
         model = Event
         fields = ("id", "issue_id", "title", "level", "timestamp", "span_id")
+
+
+class LogRecordSerializer(serializers.ModelSerializer[LogRecord]):
+    class Meta:
+        model = LogRecord
+        fields = (
+            "id",
+            "timestamp",
+            "level",
+            "body",
+            "logger",
+            "trace_id",
+            "span_id",
+            "environment",
+            "release",
+            "attributes",
+        )

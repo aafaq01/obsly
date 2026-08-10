@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 
 import { api, type TraceDetail as Detail } from '../api'
+import { LogList } from '../components/LogList'
 import { Notice } from '../components/Notice'
 import { handle } from '../errors'
 import { absoluteTime } from '../time'
@@ -37,6 +38,15 @@ export function TraceDetail() {
         <Stat label="Release" value={trace.release || '—'} />
         <Stat label="Started" value={absoluteTime(trace.start_timestamp)} />
       </div>
+
+      {trace.logs.length > 0 && (
+        <div className="section">
+          <h2 className="section__title">Logs from this request</h2>
+          <div className="card">
+            <LogList records={trace.logs} />
+          </div>
+        </div>
+      )}
 
       {trace.errors.length > 0 && (
         <div className="section">

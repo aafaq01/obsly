@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     "apps.events",
     "apps.issues",
     "apps.tracing",
+    "apps.logs",
     "apps.ingest",
     "apps.api",
 ]

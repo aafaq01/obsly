@@ -90,6 +90,19 @@ export interface TraceSummary {
   span_count: number
 }
 
+export interface LogRecord {
+  id: string
+  timestamp: string
+  level: string
+  body: string
+  logger: string
+  trace_id: string
+  span_id: string
+  environment: string
+  release: string
+  attributes: Record<string, unknown>
+}
+
 export interface CorrelatedError {
   id: string
   issue_id: number | null
@@ -102,6 +115,7 @@ export interface CorrelatedError {
 export interface TraceDetail extends TraceSummary {
   spans: TraceSpan[]
   errors: CorrelatedError[]
+  logs: LogRecord[]
 }
 
 export interface Frame {
@@ -249,6 +263,8 @@ export const api = {
   traces: (projectId: number, params: URLSearchParams) =>
     get<TraceSummary[]>(`/projects/${projectId}/traces/?${params.toString()}`),
   trace: (id: string) => get<TraceDetail>(`/traces/${id}/`),
+  logs: (projectId: number, params: URLSearchParams) =>
+    get<LogRecord[]>(`/projects/${projectId}/logs/?${params.toString()}`),
   performance: (projectId: number, period: string) =>
     get<Performance>(`/projects/${projectId}/performance/?period=${period}`),
   issueEvents: (id: number) => get<ObslyEvent[]>(`/issues/${id}/events/`),

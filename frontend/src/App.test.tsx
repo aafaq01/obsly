@@ -755,6 +755,20 @@ describe('Correlation', () => {
               span_id: 'c'.repeat(16),
             },
           ],
+          logs: [
+            {
+              id: 'l1',
+              timestamp: new Date().toISOString(),
+              level: 'info',
+              body: 'charging card for cart c-1',
+              logger: 'demo',
+              trace_id: 'a'.repeat(32),
+              span_id: 'c'.repeat(16),
+              environment: 'production',
+              release: 'demo@1.3.0',
+              attributes: {},
+            },
+          ],
         },
       },
     })
@@ -768,5 +782,97 @@ describe('Correlation', () => {
     expect(await screen.findByText('Errors in this request')).toBeInTheDocument()
     expect(screen.getByText('ConnectionError: 502')).toBeInTheDocument()
     expect(screen.getByText('POST payments.example.com/charge')).toBeInTheDocument()
+    // The third signal for the same request: what the application was saying while it ran.
+    expect(screen.getByText('Logs from this request')).toBeInTheDocument()
+    expect(screen.getByText('charging card for cart c-1')).toBeInTheDocument()
+  })
+})
+
+describe('Logs', () => {
+  const RECORDS = [
+    {
+      id: 'l1',
+      timestamp: new Date().toISOString(),
+      level: 'info',
+      body: 'checkout complete for cart c-1',
+      logger: 'demo',
+      trace_id: 'a'.repeat(32),
+      span_id: 'b'.repeat(16),
+      environment: 'production',
+      release: 'demo@1.3.0',
+      attributes: {},
+    },
+    {
+      id: 'l2',
+      timestamp: new Date().toISOString(),
+      level: 'warning',
+      body: 'analytics rollup on the request path',
+      logger: 'demo',
+      trace_id: '',
+      span_id: '',
+      environment: 'production',
+      release: 'demo@1.3.0',
+      attributes: {},
+    },
+  ]
+
+  function renderLogs(entry = '/projects/1/logs') {
+    return render(
+      <MemoryRouter initialEntries={[entry]}>
+        <App />
+      </MemoryRouter>,
+    )
+  }
+
+  it('lists records with level and logger', async () => {
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/1/logs/': { body: RECORDS },
+    })
+
+    renderLogs()
+
+    expect(await screen.findByText('checkout complete for cart c-1')).toBeInTheDocument()
+    expect(screen.getByText('warning')).toBeInTheDocument()
+  })
+
+  it('offers level filters as "and worse", never a single level', async () => {
+    // Filtering to exactly one level hides the errors, which is never what somebody meant.
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/1/logs/': { body: RECORDS },
+    })
+
+    renderLogs()
+
+    const select = await screen.findByLabelText('Level')
+    expect(select).toHaveTextContent('warning and worse')
+  })
+
+  it('filters to a single request when a trace is given', async () => {
+    const fetchMock = mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/1/logs/': { body: [RECORDS[0]] },
+    })
+
+    renderLogs(`/projects/1/logs?trace_id=${'a'.repeat(32)}`)
+
+    expect(await screen.findByText(/Filtered to one request/)).toBeInTheDocument()
+    await waitFor(() => {
+      const urls = fetchMock.mock.calls.map((c) => String(c[0]))
+      expect(urls.some((url) => url.includes('trace_id=aaaa'))).toBe(true)
+    })
+  })
+
+  it('explains that logs are off rather than showing an empty stream', async () => {
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/1/logs/': { body: [] },
+    })
+
+    renderLogs()
+
+    expect(await screen.findByText(/No logs yet/)).toBeInTheDocument()
+    expect(screen.getByText(/enable_logs=True/)).toBeInTheDocument()
   })
 })

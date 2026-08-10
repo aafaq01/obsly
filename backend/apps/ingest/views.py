@@ -21,15 +21,18 @@ from django.views.decorators.http import require_POST
 from apps.events.models import Event
 from apps.ingest import envelope as envelope_parser
 from apps.ingest.auth import AuthenticationError, authenticate
+from apps.ingest.logs import logs_from_payload
 from apps.ingest.normalize import event_from_payload
 from apps.ingest.transactions import transaction_from_payload
 from apps.issues.grouping import assign_issues
+from apps.logs.models import LogRecord
 from apps.tracing.models import Span, Transaction
 
 logger = logging.getLogger(__name__)
 
 EVENT_ITEM = "event"
 TRANSACTION_ITEM = "transaction"
+LOG_ITEM = "log"
 
 
 @csrf_exempt  # SDKs are not browsers with our cookies; the DSN key is the credential.
@@ -92,8 +95,18 @@ def envelope(request: HttpRequest, project_id: int) -> JsonResponse:
         transactions.append(transaction)
         spans.extend(transaction_spans)
 
+    log_records: list[LogRecord] = []
+    for item in parsed.items_of_type(LOG_ITEM):
+        try:
+            payload = item.json()
+        except envelope_parser.EnvelopeError as exc:
+            rejected.append({"type": item.type, "reason": str(exc)})
+            continue
+        log_records.extend(logs_from_payload(key.project, payload, now=now))
+
     stored = _store(events)
     stored_transactions = _store_transactions(transactions, spans)
+    stored_logs = _store_logs(log_records)
 
     try:
         assign_issues(stored)
@@ -109,13 +122,26 @@ def envelope(request: HttpRequest, project_id: int) -> JsonResponse:
 
     return JsonResponse(
         {
-            "accepted": len(stored) + len(stored_transactions),
+            "accepted": len(stored) + len(stored_transactions) + stored_logs,
             "rejected": rejected,
             "event_ids": [str(event.pk) for event in stored],
             "transaction_ids": [str(txn.pk) for txn in stored_transactions],
         },
         status=200,
     )
+
+
+@transaction.atomic
+def _store_logs(records: list[LogRecord]) -> int:
+    """Server-generated ids, so ignore_conflicts cannot dedupe a replayed batch.
+
+    Accepted: logs are cheap and a duplicated line is a smaller problem than the coordination
+    a client-supplied id per line would cost.
+    """
+    if not records:
+        return 0
+    LogRecord.objects.bulk_create(records, batch_size=500)
+    return len(records)
 
 
 @transaction.atomic

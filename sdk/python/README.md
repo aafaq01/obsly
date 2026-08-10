@@ -70,3 +70,29 @@ cd sdk/python
 uv sync
 uv run pytest && uv run ruff check . && uv run mypy obsly
 ```
+
+## Logs
+
+Off by default — logs are the highest-volume signal by a wide margin.
+
+```python
+obsly.init(dsn="...", enable_logs=True)
+
+obsly.logger.info("checkout complete", cart_id="c-1")
+```
+
+To forward the logging you already have, without editing a call site:
+
+```python
+import logging
+logging.getLogger().addHandler(obsly.ObslyLogHandler())
+```
+
+Every record carries the active `trace_id` and `span_id`, so a log line and the request that
+produced it are joined by an index lookup rather than by scrolling to a timestamp — **including
+on requests that succeeded**, which is most of them and where the explanation for the failures
+usually lives.
+
+Records are batched and flushed on size, on age, and by a background thread. The thread matters:
+the age check only runs when something is added, so without it the last lines of a burst sit
+stranded until the application happens to log again.
