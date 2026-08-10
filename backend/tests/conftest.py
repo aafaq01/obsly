@@ -6,14 +6,29 @@ before any conftest is imported, so a conftest is too late to influence settings
 
 import json
 import uuid
+from collections.abc import Iterator
 from typing import Any, cast
 
 import pytest
+from django.core.cache import cache
 from django.http import HttpResponse
 from django.test import Client
 from django.urls import reverse
 
 from apps.projects.models import Organization, Project, ProjectKey
+
+
+@pytest.fixture(autouse=True)
+def clear_cache() -> Iterator[None]:
+    """DRF keeps throttle history in the cache, which outlives a test.
+
+    Without this, one test exhausting the login throttle makes later tests fail with 429 —
+    and which tests fail depends on execution order, so it presents as flake rather than as
+    the shared-state bug it is.
+    """
+    cache.clear()
+    yield
+    cache.clear()
 
 
 @pytest.fixture

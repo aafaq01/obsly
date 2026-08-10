@@ -528,3 +528,64 @@ pre.raw {
   color: var(--status-critical);
   font-size: 12.5px;
 }
+
+/* --- sign in ------------------------------------------------------------- */
+
+.login {
+  max-width: 360px;
+  margin: 8vh auto 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.login__title {
+  font-size: 18px;
+  font-weight: 650;
+  margin: 0 0 4px;
+  letter-spacing: -0.01em;
+}
+
+.login__field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 13px;
+  color: var(--ink-secondary);
+}
+
+.login__field input {
+  font: inherit;
+  font-size: 14px;
+  color: var(--ink);
+  background: var(--plane);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+
+.login__field input:focus-visible {
+  outline: 2px solid var(--series-1);
+  outline-offset: 1px;
+}
+
+.login__error {
+  color: var(--status-critical);
+  font-size: 13px;
+  margin: 0;
+}
+
+.button--primary {
+  background: var(--series-1);
+  border-color: var(--series-1);
+  color: #ffffff;
+}
+
+.button--primary:hover:not(:disabled) {
+  color: #ffffff;
+  filter: brightness(1.08);
+}
