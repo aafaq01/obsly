@@ -1,0 +1,94 @@
+export interface Project {
+  id: number
+  name: string
+  slug: string
+  platform: string
+  organization: string
+  unresolved_count: number
+}
+
+export interface Issue {
+  id: number
+  project: number
+  title: string
+  culprit: string
+  level: string
+  status: string
+  times_seen: number
+  first_seen: string
+  last_seen: string
+  hourly: number[]
+}
+
+export interface Frame {
+  filename: string
+  module: string
+  function: string
+  lineno: number | null
+  in_app: boolean
+}
+
+export interface ExceptionValue {
+  type: string
+  value: string
+  frames: Frame[]
+}
+
+export interface ObslyEvent {
+  id: string
+  timestamp: string
+  received_at: string
+  level: string
+  platform: string
+  message: string
+  exception_type: string
+  exception_value: string
+  culprit: string
+  environment: string
+  release: string
+  server_name: string
+  tags: Record<string, string>
+  exception: ExceptionValue[]
+  payload: Record<string, unknown>
+}
+
+export interface TagValue {
+  value: string
+  count: number
+  percentage: number
+}
+
+export interface IssueDetail {
+  issue: Issue & { fingerprint: string; fingerprint_components: string[] }
+  latest_event: ObslyEvent | null
+  tags: Record<string, TagValue[]>
+}
+
+/** Thrown when the session is missing or expired, so callers can show a sign-in prompt
+ *  rather than an indistinguishable "something went wrong". */
+export class UnauthorizedError extends Error {
+  // Subclassing Error does not set `name`, and code that branches on it silently falls
+  // through to the generic path.
+  override name = 'UnauthorizedError'
+}
+
+async function get<T>(path: string): Promise<T> {
+  const response = await fetch(`/api/0${path}`, { headers: { Accept: 'application/json' } })
+
+  if (response.status === 401 || response.status === 403) {
+    throw new UnauthorizedError('not signed in')
+  }
+  if (!response.ok) {
+    throw new Error(`${path} returned ${response.status}`)
+  }
+  return (await response.json()) as T
+}
+
+export const api = {
+  me: () => get<{ username: string }>('/me/'),
+  projects: () => get<Project[]>('/projects/'),
+  issues: (projectId: number, params: URLSearchParams) =>
+    get<Issue[]>(`/projects/${projectId}/issues/?${params.toString()}`),
+  issue: (id: number) => get<IssueDetail>(`/issues/${id}/`),
+  issueEvents: (id: number) => get<ObslyEvent[]>(`/issues/${id}/events/`),
+}

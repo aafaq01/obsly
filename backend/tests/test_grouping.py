@@ -8,8 +8,7 @@ from apps.events.models import Event
 from apps.issues.fingerprint import compute, normalize_value
 from apps.issues.models import Issue, IssueStatus
 from apps.projects.models import Project, ProjectKey
-from tests.conftest import build_envelope
-from tests.test_ingest_view import post
+from tests.conftest import build_envelope, post
 
 pytestmark = pytest.mark.django_db
 
