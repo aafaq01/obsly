@@ -146,6 +146,29 @@ class TestCapture:
         frames = transport.events()[0]["exception"]["values"][-1]["stacktrace"]["frames"]
         assert any(frame["in_app"] for frame in frames)
 
+    def test_the_sdks_own_frames_are_never_in_app(
+        self, transport: FakeTransport, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Caught running against a real app: the ASGI middleware showed up as the user's code,
+        pointing an engineer at our file instead of their handler. site-packages excludes it by
+        accident; an editable install or a vendored copy does not."""
+        monkeypatch.setattr(obsly.client, "_client", Client(DSN, transport=transport))
+
+        app = FastAPI()
+        app.add_middleware(ObslyMiddleware)
+
+        @app.get("/boom")
+        def boom() -> None:
+            raise ValueError("kaboom")
+
+        with pytest.raises(ValueError, match="kaboom"), TestClient(app) as test_client:
+            test_client.get("/boom")
+
+        frames = transport.events()[0]["exception"]["values"][-1]["stacktrace"]["frames"]
+        obsly_frames = [f for f in frames if f["module"].startswith("obsly")]
+        assert obsly_frames, "the middleware frame should still be recorded"
+        assert not any(f["in_app"] for f in obsly_frames)
+
     def test_json_module_frames_are_not_in_app(self) -> None:
         try:
             json.loads("{definitely not json")

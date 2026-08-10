@@ -21,6 +21,9 @@ _STDLIB_PATHS = tuple(
 )
 
 
+_SDK_ROOT = os.path.normcase(os.path.dirname(os.path.abspath(__file__)))
+
+
 def _is_in_app(filename: str) -> bool:
     """Is this the user's code, or somebody else's?
 
@@ -29,6 +32,11 @@ def _is_in_app(filename: str) -> bool:
     """
     normalised = os.path.normcase(os.path.abspath(filename))
 
+    # Our own frames are never the user's code. A site-packages install would exclude them by
+    # accident; an editable install or a vendored copy would not, and the SDK appearing at the
+    # top of somebody's traceback points them at the wrong file.
+    if normalised.startswith(_SDK_ROOT):
+        return False
     if "site-packages" in normalised or "dist-packages" in normalised:
         return False
     return not any(normalised.startswith(path) for path in _STDLIB_PATHS)

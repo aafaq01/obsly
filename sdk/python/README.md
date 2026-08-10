@@ -16,7 +16,7 @@ pip install -e sdk/python
 import obsly
 
 obsly.init(
-    dsn="http://<public_key>@localhost:8081/1",   # or set OBSLY_DSN
+    dsn="http://<public_key>@localhost:8081/1",  # or set OBSLY_DSN
     release="myapp@1.4.2",
     environment="production",
 )
