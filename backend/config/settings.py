@@ -39,6 +39,9 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    # Serves collected static files straight from gunicorn, so the container needs no separate
+    # static file server. Must sit directly after SecurityMiddleware.
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -94,6 +97,10 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
+}
 
 # --- REST framework ---------------------------------------------------------
 
@@ -109,9 +116,18 @@ REST_FRAMEWORK = {
 }
 
 # --- Security ---------------------------------------------------------------
-# Enforced whenever DEBUG is off, so a production deploy cannot forget them.
 
-if not DEBUG:
+# Transport-independent. Always on, in every environment.
+SECURE_CONTENT_TYPE_NOSNIFF = True
+X_FRAME_OPTIONS = "DENY"
+
+# HTTPS-dependent hardening. Defaults on whenever DEBUG is off, so a production deploy cannot
+# forget it. The local docker stack serves plain HTTP and opts out explicitly — without that,
+# SSL redirect would bounce every request and Secure cookies would never reach the browser,
+# so nobody could log in. Never set DJANGO_HTTPS=False on anything internet-facing.
+HTTPS_ENABLED = env.bool("DJANGO_HTTPS", default=not DEBUG)
+
+if HTTPS_ENABLED:
     SECURE_SSL_REDIRECT = True
     # Load balancer and Kubernetes probes reach the pod over plain HTTP inside the cluster;
     # redirecting them to HTTPS makes every probe fail. Health exposes no sensitive data.
@@ -122,8 +138,6 @@ if not DEBUG:
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
-    SECURE_CONTENT_TYPE_NOSNIFF = True
-    X_FRAME_OPTIONS = "DENY"
 
 # --- Logging ----------------------------------------------------------------
 

@@ -35,12 +35,36 @@ Detail: [docs/architecture.md](docs/architecture.md).
 study of Sentry, used as the functional map for what an observability platform has to cover. It is
 reference material, not a specification of this codebase.
 
-## Development
+## Running the whole stack
 
-Requires Python 3.12+, Node 22+, Docker, and [uv](https://docs.astral.sh/uv/).
+Docker only — no Python or Node needed on the host.
 
 ```bash
-docker compose up -d                        # postgres on :5432
+docker compose up --build -d
+```
+
+| URL | What |
+|---|---|
+| **http://localhost:8080** | The app. nginx serves the React bundle and fronts the API on one origin |
+| http://localhost:8080/health/ | Liveness + database reachability |
+| http://localhost:8080/admin/ | Django admin |
+| http://localhost:8000 | Backend directly, for poking the API without nginx |
+
+Migrations run automatically on backend start. `docker compose down` stops it; add `-v` to drop
+the database volume too.
+
+The stack sets `DJANGO_DEBUG=False` for production-like behaviour but `DJANGO_HTTPS=False`,
+because it serves plain HTTP — without that, the SSL redirect would bounce every request and
+`Secure` cookies would never reach the browser. Never set `DJANGO_HTTPS=False` on anything
+internet-facing.
+
+## Development
+
+For hot reload, run the services directly. Requires Python 3.12+, Node 22+, and
+[uv](https://docs.astral.sh/uv/).
+
+```bash
+docker compose up -d postgres               # just the database
 
 cd backend
 cp .env.example .env                        # then set DJANGO_SECRET_KEY
@@ -52,6 +76,8 @@ cd ../frontend
 npm install
 npm run dev                                 # :5173, proxies /api and /health to :8000
 ```
+
+Open **http://localhost:5173**, not `127.0.0.1` — Vite binds IPv6 `[::1]` only.
 
 Settings deliberately have no fallback for `DJANGO_SECRET_KEY` or `DATABASE_URL` — a missing
 value fails at boot rather than silently starting with a shared default.

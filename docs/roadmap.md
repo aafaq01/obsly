@@ -7,7 +7,8 @@ linters and type checks are green in CI.
 
 | # | Branch | Delivers | Status |
 |---|---|---|---|
-| 1 | `feat/scaffold` | Django + DRF backend, React + Vite frontend, ruff / mypy / pytest / eslint / vitest, CI, docker-compose | ☐ |
+| 1 | `feat/scaffold` | Django + DRF backend, React + Vite frontend, ruff / mypy / pytest / eslint / vitest, CI | ☑ |
+| 1b | `feat/docker-stack` | Whole stack under `docker compose up` behind one origin on :8080 | ☑ |
 | 2 | `feat/core-domain` | Organization, Team, Project, Membership, ProjectKey (DSN), admin, tests | ☐ |
 | 3 | `feat/ingest` | Envelope protocol, DSN auth, event storage, rate limiting | ☐ |
 | 4 | `feat/grouping` | Fingerprinting, Issue dedupe, first/last seen, counts | ☐ |
