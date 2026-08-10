@@ -26,7 +26,7 @@ def error(
     return {"exception": {"values": [entry]}, **extra}
 
 
-FRAMES = [
+FRAMES: list[dict[str, Any]] = [
     {"module": "app.api", "function": "checkout", "lineno": 10, "in_app": True},
     {"module": "app.crud", "function": "get_cart", "lineno": 42, "in_app": True},
 ]
@@ -64,7 +64,7 @@ class TestFingerprint:
     def test_line_numbers_do_not_affect_grouping(self) -> None:
         """Adding an import shifts every line below it. Grouping on line numbers would reopen
         every issue in the file on the next deploy."""
-        shifted = [{**frame, "lineno": int(frame["lineno"]) + 7} for frame in FRAMES]
+        shifted = [{**frame, "lineno": frame["lineno"] + 7} for frame in FRAMES]
 
         assert compute(error(frames=FRAMES))[0] == compute(error(frames=shifted))[0]
 
