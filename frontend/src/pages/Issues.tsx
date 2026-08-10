@@ -47,6 +47,18 @@ export function Issues() {
       <h1 className="page-title">{project ? project.name : 'Issues'}</h1>
       <p className="page-subtitle">
         {project ? `${project.organization} · ${project.platform}` : 'Loading projects…'}
+        {project && (
+          <>
+            {' · '}
+            <Link to={`/projects/${project.id}/performance`} style={{ color: 'var(--series-1)' }}>
+              Performance
+            </Link>
+            {' · '}
+            <Link to={`/projects/${project.id}/settings`} style={{ color: 'var(--series-1)' }}>
+              Settings
+            </Link>
+          </>
+        )}
       </p>
 
       <div className="filters">

@@ -423,3 +423,122 @@ describe('Projects page', () => {
     expect(await screen.findByText('slug: checkout-api')).toBeInTheDocument()
   })
 })
+
+describe('Performance page', () => {
+  const PERF = {
+    period: '24h',
+    endpoints: [
+      {
+        name: '/checkout',
+        op: 'http.server',
+        count: 1440,
+        throughput_per_minute: 1.0,
+        failure_rate: 0.05,
+        total_ms: 432000,
+        p50: 20,
+        p75: 24,
+        p95: 8000,
+        p99: 9100,
+      },
+      {
+        name: '/health',
+        op: 'http.server',
+        count: 100,
+        throughput_per_minute: 0.07,
+        failure_rate: 0,
+        total_ms: 60,
+        p50: 0.6,
+        p75: 0.7,
+        p95: 0.9,
+        p99: 1,
+      },
+    ],
+    summary: {
+      transactions: 1540,
+      throughput_per_minute: 1.07,
+      failure_rate: 0.047,
+      hourly: Array<number>(24).fill(64),
+    },
+  }
+
+  function renderPerf() {
+    return render(
+      <MemoryRouter initialEntries={['/projects/1/performance']}>
+        <App />
+      </MemoryRouter>,
+    )
+  }
+
+  it('shows every percentile per endpoint', async () => {
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/1/performance/': { body: PERF },
+    })
+
+    renderPerf()
+
+    expect(await screen.findByText('/checkout')).toBeInTheDocument()
+    expect(screen.getByText('20ms')).toBeInTheDocument()
+    expect(screen.getByText('8.00s')).toBeInTheDocument()
+    expect(screen.getByText('9.10s')).toBeInTheDocument()
+  })
+
+  it('ranks by time spent, so a rarely-called slow endpoint does not top the list', async () => {
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/1/performance/': { body: PERF },
+    })
+
+    renderPerf()
+    await screen.findByText('/checkout')
+
+    const names = screen.getAllByText(/^\/(checkout|health)$/).map((n) => n.textContent)
+    expect(names[0]).toBe('/checkout')
+  })
+
+  it('renders sub-millisecond latency as <1ms, not 0ms', async () => {
+    // "0ms" reads as "not measured" rather than "fast".
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/1/performance/': { body: PERF },
+    })
+
+    renderPerf()
+
+    expect(await screen.findAllByText('<1ms')).not.toHaveLength(0)
+  })
+
+  it('explains that tracing is off rather than showing an empty table', async () => {
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/1/performance/': {
+        body: {
+          ...PERF,
+          endpoints: [],
+          summary: { transactions: 0, throughput_per_minute: 0, failure_rate: 0, hourly: [] },
+        },
+      },
+    })
+
+    renderPerf()
+
+    expect(await screen.findByText(/No transactions yet/)).toBeInTheDocument()
+    expect(screen.getByText(/traces_sample_rate/)).toBeInTheDocument()
+  })
+
+  it('refetches when the period changes', async () => {
+    const fetchMock = mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/1/performance/': { body: PERF },
+    })
+
+    renderPerf()
+    await screen.findByText('/checkout')
+    await userEvent.selectOptions(screen.getByLabelText('Period'), '7d')
+
+    await waitFor(() => {
+      const urls = fetchMock.mock.calls.map((c) => String(c[0]))
+      expect(urls.some((url) => url.includes('period=7d'))).toBe(true)
+    })
+  })
+})

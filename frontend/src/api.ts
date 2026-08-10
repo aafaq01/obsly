@@ -39,6 +39,30 @@ export interface Issue {
   hourly: number[]
 }
 
+export interface EndpointStats {
+  name: string
+  op: string
+  count: number
+  throughput_per_minute: number
+  failure_rate: number
+  total_ms: number
+  p50: number
+  p75: number
+  p95: number
+  p99: number
+}
+
+export interface Performance {
+  period: string
+  endpoints: EndpointStats[]
+  summary: {
+    transactions: number
+    throughput_per_minute: number
+    failure_rate: number
+    hourly: number[]
+  }
+}
+
 export interface Frame {
   filename: string
   module: string
@@ -177,6 +201,8 @@ export const api = {
   issues: (projectId: number, params: URLSearchParams) =>
     get<Issue[]>(`/projects/${projectId}/issues/?${params.toString()}`),
   issue: (id: number) => get<IssueDetail>(`/issues/${id}/`),
+  performance: (projectId: number, period: string) =>
+    get<Performance>(`/projects/${projectId}/performance/?period=${period}`),
   issueEvents: (id: number) => get<ObslyEvent[]>(`/issues/${id}/events/`),
   setIssueStatus: (id: number, status: string) => patch<Issue>(`/issues/${id}/status/`, { status }),
 }
