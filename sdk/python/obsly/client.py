@@ -2,14 +2,18 @@
 
 import logging
 import os
+import random
 import socket
 import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from types import TracebackType
 from typing import Any
 
 from obsly import dsn as dsn_module
 from obsly.stacktrace import exception_chain
+from obsly.tracing import Transaction, _current_span
 from obsly.transport import Transport, build_envelope
 
 logger = logging.getLogger("obsly")
@@ -26,6 +30,7 @@ class Client:
         release: str = "",
         server_name: str | None = None,
         send_default_pii: bool = False,
+        traces_sample_rate: float = 0.0,
         tags: dict[str, str] | None = None,
         transport: Transport | None = None,
     ) -> None:
@@ -36,6 +41,9 @@ class Client:
         # Off by default. Turning on the capture of user identifiers, addresses and request
         # bodies must be a decision somebody made, not a default they inherited.
         self.send_default_pii = send_default_pii
+        # Off by default. Tracing multiplies event volume by however many requests a
+        # service handles, and nobody should discover that from a bill.
+        self.traces_sample_rate = max(0.0, min(1.0, traces_sample_rate))
         self.tags = dict(tags or {})
         self._transport = transport or Transport(parsed.envelope_url, parsed.public_key)
 
@@ -71,6 +79,64 @@ class Client:
         )
         self._transport.send(envelope)
         return event_id
+
+    @contextmanager
+    def start_transaction(
+        self,
+        name: str,
+        op: str = "custom",
+        *,
+        trace_id: str | None = None,
+        parent_span_id: str | None = None,
+        sampled: bool | None = None,
+    ) -> Iterator[Transaction]:
+        """Begin a trace, or continue one an upstream service started.
+
+        `sampled` is inherited when the caller passes it, and only decided here when it is None.
+        A per-service decision would produce traces with holes in the middle, which read as
+        "that service was never called" rather than "we chose not to record it".
+        """
+        if sampled is None:
+            sampled = random.random() < self.traces_sample_rate  # noqa: S311 - not a secret
+
+        transaction = Transaction(op=op, name=name, sampled=sampled, parent_span_id=parent_span_id)
+        if trace_id:
+            # Continuing an upstream trace rather than starting one, so the id must be theirs.
+            transaction.trace_id = trace_id
+        # A transaction is its own root: nested spans find their container through this.
+        transaction.transaction = transaction
+
+        token = _current_span.set(transaction)
+        try:
+            yield transaction
+        except Exception:
+            transaction.finish("internal_error")
+            raise
+        else:
+            transaction.finish()
+        finally:
+            _current_span.reset(token)
+            if transaction.sampled:
+                self._send_transaction(transaction)
+
+    def _send_transaction(self, transaction: Transaction) -> None:
+        event_id = str(uuid.uuid4())
+        payload = {
+            "event_id": event_id,
+            "platform": "python",
+            "environment": self.environment,
+            "release": self.release,
+            "server_name": self.server_name,
+            "sdk": SDK,
+            "tags": dict(self.tags),
+            **transaction.to_payload(),
+        }
+        self._transport.send(
+            build_envelope(
+                {"event_id": event_id, "sent_at": payload["timestamp"]},
+                [("transaction", payload)],
+            )
+        )
 
     def flush(self, timeout: float = 2.0) -> bool:
         return self._transport.flush(timeout)
@@ -122,6 +188,16 @@ def capture_exception(exc: BaseException | None = None, **kwargs: Any) -> str | 
     return _client.capture_exception(exc, **kwargs)
 
 
+@contextmanager
+def start_transaction(name: str, op: str = "custom", **kwargs: Any) -> Iterator[Transaction]:
+    """No-op when the SDK is not configured, so instrumentation never depends on it."""
+    if _client is None:
+        yield Transaction(op=op, name=name, sampled=False)
+        return
+    with _client.start_transaction(name, op, **kwargs) as transaction:
+        yield transaction
+
+
 def capture_message(message: str, **kwargs: Any) -> str | None:
     return None if _client is None else _client.capture_message(message, **kwargs)
 
@@ -138,4 +214,5 @@ __all__ = [
     "flush",
     "get_client",
     "init",
+    "start_transaction",
 ]

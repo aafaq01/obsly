@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     "apps.projects",
     "apps.events",
     "apps.issues",
+    "apps.tracing",
     "apps.ingest",
     "apps.api",
 ]

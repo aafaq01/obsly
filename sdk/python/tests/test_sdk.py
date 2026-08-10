@@ -303,3 +303,120 @@ class TestFastapiIntegration:
             test_client.get("/boom?email=someone@example.com")
 
         assert "query_string" not in transport.events()[0]["extra"]["request"]
+
+
+class TestTracing:
+    def app_with_tracing(self, transport: FakeTransport, rate: float = 1.0) -> FastAPI:
+        client = Client(DSN, transport=transport, traces_sample_rate=rate)  # type: ignore[arg-type]
+        obsly.client._client = client
+
+        app = FastAPI()
+        app.add_middleware(ObslyMiddleware)
+
+        @app.get("/items/{item_id}")
+        def read_item(item_id: int) -> dict[str, int]:
+            with obsly.start_span("db.query", "SELECT * FROM items WHERE id = %s"):
+                pass
+            return {"id": item_id}
+
+        @app.get("/boom")
+        def boom() -> None:
+            raise ValueError("kaboom")
+
+        return app
+
+    def transactions(self, transport: FakeTransport) -> list[dict[str, Any]]:
+        return [event for event in transport.events() if event.get("type") == "transaction"]
+
+    def test_names_a_transaction_by_route_pattern_not_url(self, transport: FakeTransport) -> None:
+        """/items/8123 as a name makes a separate row per id and a percentile of one."""
+        app = self.app_with_tracing(transport)
+
+        with TestClient(app) as test_client:
+            test_client.get("/items/8123")
+
+        [txn] = self.transactions(transport)
+        assert txn["transaction"] == "/items/{item_id}"
+
+    def test_records_nested_spans_under_the_transaction(self, transport: FakeTransport) -> None:
+        app = self.app_with_tracing(transport)
+
+        with TestClient(app) as test_client:
+            test_client.get("/items/1")
+
+        [txn] = self.transactions(transport)
+        [span] = [s for s in txn["spans"] if s["op"] == "db.query"]
+        assert span["description"].startswith("SELECT")
+        assert span["parent_span_id"] == txn["contexts"]["trace"]["span_id"]
+        assert span["trace_id"] == txn["contexts"]["trace"]["trace_id"]
+
+    def test_records_the_status_code(self, transport: FakeTransport) -> None:
+        app = self.app_with_tracing(transport)
+
+        with TestClient(app) as test_client:
+            test_client.get("/items/1")
+
+        [txn] = self.transactions(transport)
+        assert txn["data"]["http.status_code"] == 200
+        assert txn["contexts"]["trace"]["status"] == "ok"
+
+    def test_a_failed_request_is_marked_internal_error(self, transport: FakeTransport) -> None:
+        app = self.app_with_tracing(transport)
+
+        with pytest.raises(ValueError, match="kaboom"), TestClient(app) as test_client:
+            test_client.get("/boom")
+
+        [txn] = self.transactions(transport)
+        assert txn["contexts"]["trace"]["status"] == "internal_error"
+
+    def test_sample_rate_zero_sends_nothing(self, transport: FakeTransport) -> None:
+        """Tracing multiplies volume by request count; nobody should learn that from a bill."""
+        app = self.app_with_tracing(transport, rate=0.0)
+
+        with TestClient(app) as test_client:
+            test_client.get("/items/1")
+
+        assert self.transactions(transport) == []
+
+    def test_continues_an_upstream_trace(self, transport: FakeTransport) -> None:
+        app = self.app_with_tracing(transport, rate=0.0)
+        upstream_trace = "a" * 32
+
+        with TestClient(app) as test_client:
+            test_client.get("/items/1", headers={"obsly-trace": f"{upstream_trace}-{'b' * 16}-1"})
+
+        # Sampled because the upstream said so, despite this service's own rate being 0.
+        [txn] = self.transactions(transport)
+        assert txn["contexts"]["trace"]["trace_id"] == upstream_trace
+
+    def test_a_malformed_trace_header_does_not_break_the_request(
+        self, transport: FakeTransport
+    ) -> None:
+        """A broken header from an upstream we do not control must start a new trace."""
+        app = self.app_with_tracing(transport)
+
+        with TestClient(app) as test_client:
+            response = test_client.get("/items/1", headers={"obsly-trace": "garbage"})
+
+        assert response.status_code == 200
+        assert len(self.transactions(transport)[0]["contexts"]["trace"]["trace_id"]) == 32
+
+    def test_start_span_is_a_no_op_without_a_transaction(self) -> None:
+        """Instrumentation in a library must not depend on the app enabling tracing."""
+        obsly.client._client = None
+
+        with obsly.start_span("db.query", "SELECT 1") as span:
+            assert span.sampled is False
+
+    def test_span_count_is_bounded(self, transport: FakeTransport) -> None:
+        """A runaway loop must cost a truncated trace, not the memory of the host process."""
+        client = Client(DSN, transport=transport, traces_sample_rate=1.0)  # type: ignore[arg-type]
+
+        with client.start_transaction("bulk", "custom"):
+            for _ in range(1200):
+                with obsly.start_span("db.query"):
+                    pass
+
+        [txn] = self.transactions(transport)
+        assert len(txn["spans"]) == 1000
+        assert txn["dropped_spans"] == 200

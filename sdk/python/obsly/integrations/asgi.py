@@ -15,6 +15,7 @@ from typing import Any
 from urllib.parse import unquote
 
 from obsly.client import capture_exception, get_client
+from obsly.tracing import TRACE_HEADER, parse_trace_header
 
 logger = logging.getLogger("obsly")
 
@@ -39,11 +40,50 @@ class ObslyMiddleware:
             await self.app(scope, receive, send)
             return
 
+        client = get_client()
+        if client is None or scope["type"] != "http":
+            await self._call_untraced(scope, receive, send)
+            return
+
+        upstream = parse_trace_header(_header(scope, TRACE_HEADER))
+        trace_id, parent_span_id, sampled = upstream or (None, None, None)
+
+        # The name is filled in after routing: the matched pattern only exists on the scope
+        # once Starlette has resolved it, and a raw path here would make every id its own row.
+        with client.start_transaction(
+            _path(scope),
+            op="http.server",
+            trace_id=trace_id,
+            parent_span_id=parent_span_id,
+            sampled=sampled,
+        ) as transaction:
+            status_holder: dict[str, int] = {}
+
+            async def send_wrapper(message: dict[str, Any]) -> None:
+                if message["type"] == "http.response.start":
+                    status_holder["status"] = message["status"]
+                await send(message)
+
+            try:
+                await self.app(scope, receive, send_wrapper)
+            except Exception as exc:
+                transaction.status = "internal_error"
+                transaction.name = _route_pattern(scope) or _path(scope)
+                # Report, then re-raise unchanged. The application's own error handling — and
+                # the 500 the client is waiting for — must behave exactly as it would
+                # without us.
+                self._report(exc, scope)
+                raise
+            else:
+                transaction.name = _route_pattern(scope) or _path(scope)
+                transaction.status = _status_label(status_holder.get("status", 200))
+                transaction.data["http.status_code"] = status_holder.get("status", 200)
+                transaction.data["http.method"] = scope.get("method", "")
+
+    async def _call_untraced(self, scope: Scope, receive: Receive, send: Send) -> None:
         try:
             await self.app(scope, receive, send)
         except Exception as exc:
-            # Report, then re-raise unchanged. The application's own error handling — and the
-            # 500 the client is waiting for — must behave exactly as it would without us.
             self._report(exc, scope)
             raise
 
@@ -100,3 +140,28 @@ def _headers(scope: Scope, *, include_all: bool) -> dict[str, str]:
             continue
         safe[name] = raw_value.decode("latin-1")[:500]
     return safe
+
+
+def _header(scope: Scope, name: str) -> str | None:
+    wanted = name.lower().encode("latin-1")
+    for raw_name, raw_value in scope.get("headers", []):
+        if raw_name.lower() == wanted:
+            return str(raw_value.decode("latin-1"))
+    return None
+
+
+def _path(scope: Scope) -> str:
+    return str(scope.get("path", "/"))
+
+
+def _status_label(status: int) -> str:
+    """gRPC-style labels, so "did it work" is one field rather than a numeric range check."""
+    if status < 400:
+        return "ok"
+    if status == 404:
+        return "not_found"
+    if status in (401, 403):
+        return "unauthenticated"
+    if status < 500:
+        return "invalid_argument"
+    return "internal_error"
