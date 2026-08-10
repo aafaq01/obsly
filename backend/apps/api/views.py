@@ -25,6 +25,7 @@ from apps.api.serializers import (
     EventSerializer,
     IssueDetailSerializer,
     IssueSerializer,
+    LogRecordSerializer,
     OrganizationSerializer,
     ProjectDetailSerializer,
     ProjectKeySerializer,
@@ -34,6 +35,7 @@ from apps.api.serializers import (
 )
 from apps.events.models import Event
 from apps.issues.models import Issue, IssueStatus
+from apps.logs.models import LogRecord
 from apps.projects.models import Organization, Project, ProjectKey
 from apps.tracing.models import SpanStatus, Transaction
 
@@ -153,6 +155,40 @@ def _hourly_throughput(queryset: QuerySet[Transaction], since: datetime) -> list
     return [counts.get(start + timedelta(hours=offset), 0) for offset in range(max(buckets, 1))]
 
 
+class LogListView(generics.ListAPIView[LogRecord]):
+    """The log viewer.
+
+    Newest first, because a log viewer opened during an incident is asking "what is happening",
+    not "what happened first".
+    """
+
+    serializer_class = LogRecordSerializer
+
+    def get_queryset(self) -> QuerySet[LogRecord]:
+        get_object_or_404(Project, pk=self.kwargs["project_id"])
+        since, _ = window(self.request.query_params.get("period", "24h"))
+
+        logs = LogRecord.objects.filter(project_id=self.kwargs["project_id"], timestamp__gte=since)
+
+        level = self.request.query_params.get("level", "").strip()
+        if level:
+            # Levels are ordered, so "warning" means warning-and-worse. Filtering to exactly
+            # one level hides the errors, which is never what somebody meant.
+            ordered = ["trace", "debug", "info", "warning", "error", "fatal"]
+            if level in ordered:
+                logs = logs.filter(level__in=ordered[ordered.index(level) :])
+
+        query = self.request.query_params.get("q", "").strip()
+        if query:
+            logs = logs.filter(Q(body__icontains=query) | Q(logger__icontains=query))
+
+        trace_id = self.request.query_params.get("trace_id", "").strip()
+        if trace_id:
+            logs = logs.filter(trace_id=trace_id)
+
+        return logs.order_by("-timestamp")[:200]
+
+
 class TraceListView(generics.ListAPIView[Transaction]):
     """Recent traces, slowest first by default.
 
@@ -201,10 +237,16 @@ class TraceDetailView(generics.RetrieveAPIView[Transaction]):
             .order_by("timestamp")[:50]
         )
 
+        # Everything the application said during this request, in order.
+        logs = LogRecord.objects.filter(
+            project_id=trace.project_id, trace_id=trace.trace_id
+        ).order_by("timestamp")[:200]
+
         return Response(
             {
                 **self.get_serializer(trace).data,
                 "errors": CorrelatedErrorSerializer(errors, many=True).data,
+                "logs": LogRecordSerializer(logs, many=True).data,
             }
         )
 

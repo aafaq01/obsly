@@ -16,6 +16,7 @@ export function ProjectNav() {
         <NavLink to={`/projects/${projectId}/issues`}>Issues</NavLink>
         <NavLink to={`/projects/${projectId}/performance`}>Performance</NavLink>
         <NavLink to={`/projects/${projectId}/traces`}>Traces</NavLink>
+        <NavLink to={`/projects/${projectId}/logs`}>Logs</NavLink>
         <NavLink to={`/projects/${projectId}/settings`}>Settings</NavLink>
       </nav>
     </div>

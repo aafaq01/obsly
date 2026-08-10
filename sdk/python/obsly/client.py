@@ -4,6 +4,7 @@ import logging
 import os
 import random
 import socket
+import threading
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -12,11 +13,12 @@ from types import TracebackType
 from typing import Any
 
 from obsly import dsn as dsn_module
+from obsly.logs import LogBuffer, build_record
 from obsly.stacktrace import exception_chain
 from obsly.tracing import Transaction, _current_span, get_current_span
 from obsly.transport import Transport, build_envelope
 
-logger = logging.getLogger("obsly")
+_sdk_log = logging.getLogger("obsly")
 
 SDK = {"name": "obsly.python", "version": "0.1.0"}
 
@@ -31,6 +33,7 @@ class Client:
         server_name: str | None = None,
         send_default_pii: bool = False,
         traces_sample_rate: float = 0.0,
+        enable_logs: bool = False,
         tags: dict[str, str] | None = None,
         transport: Transport | None = None,
     ) -> None:
@@ -45,7 +48,22 @@ class Client:
         # service handles, and nobody should discover that from a bill.
         self.traces_sample_rate = max(0.0, min(1.0, traces_sample_rate))
         self.tags = dict(tags or {})
+        self.enable_logs = enable_logs
+        self._logs = LogBuffer()
+        self._stop_flusher = threading.Event()
+        self._flusher: threading.Thread | None = None
         self._transport = transport or Transport(parsed.envelope_url, parsed.public_key)
+
+        # Started only after _transport exists: the thread touches it on its first tick, and
+        # starting it earlier is a race that shows up as an AttributeError under load.
+        # It exists because the buffer's age check only runs when something is added — without
+        # it the last lines of a burst sit stranded until the application happens to log
+        # again, and the end of a burst is usually the part worth reading.
+        if enable_logs:
+            self._flusher = threading.Thread(
+                target=self._flush_periodically, name="obsly-logs", daemon=True
+            )
+            self._flusher.start()
 
     def capture_exception(self, exc: BaseException, *, extra: dict[str, Any] | None = None) -> str:
         return self._capture({"exception": {"values": exception_chain(exc)}}, extra)
@@ -147,10 +165,77 @@ class Client:
             )
         )
 
+    def capture_log(
+        self,
+        level: str,
+        body: str,
+        *,
+        logger_name: str = "",
+        attributes: dict[str, Any] | None = None,
+        timestamp: datetime | None = None,
+    ) -> None:
+        """Buffer a log record, sending a batch when one is ready.
+
+        Off unless enable_logs is set. Logs are by far the highest-volume signal — an
+        application emits them on every request, not only the failing ones — and turning that
+        on must be a decision somebody made.
+        """
+        if not self.enable_logs:
+            return
+
+        span = get_current_span()
+        record = build_record(
+            level,
+            body,
+            logger_name=logger_name,
+            attributes=attributes,
+            trace_id=span.trace_id if span is not None and span.sampled else "",
+            span_id=span.span_id if span is not None and span.sampled else "",
+            timestamp=timestamp,
+        )
+
+        batch = self._logs.add(record)
+        if batch:
+            self._send_logs(batch)
+
+    def _send_logs(self, records: list[dict[str, Any]]) -> None:
+        if not records:
+            return
+        envelope_id = str(uuid.uuid4())
+        self._transport.send(
+            build_envelope(
+                {"event_id": envelope_id, "sent_at": datetime.now(tz=UTC).isoformat()},
+                [
+                    (
+                        "log",
+                        {
+                            "items": records,
+                            "environment": self.environment,
+                            "release": self.release,
+                            "server_name": self.server_name,
+                        },
+                    )
+                ],
+            )
+        )
+
+    def _flush_periodically(self, interval: float = 2.0) -> None:
+        while not self._stop_flusher.wait(interval):
+            try:
+                self._send_logs(self._logs.drain())
+            except Exception:  # noqa: BLE001
+                # This thread outliving one bad flush matters more than the batch it lost.
+                _sdk_log.debug("obsly: periodic log flush failed", exc_info=True)
+
     def flush(self, timeout: float = 2.0) -> bool:
+        # Drain buffered logs first, or a process exiting cleanly loses everything it said in
+        # the last few seconds — which is the window that usually matters.
+        self._send_logs(self._logs.drain())
         return self._transport.flush(timeout)
 
     def close(self) -> None:
+        self._stop_flusher.set()
+        self.flush()
         self._transport.close()
 
 
@@ -168,14 +253,14 @@ def init(dsn: str | None = None, **options: Any) -> Client | None:
 
     dsn = dsn or os.environ.get("OBSLY_DSN", "")
     if not dsn:
-        logger.info("obsly: no DSN configured, error reporting is disabled")
+        _sdk_log.info("obsly: no DSN configured, error reporting is disabled")
         _client = None
         return None
 
     try:
         _client = Client(dsn, **options)
     except dsn_module.DsnError as exc:
-        logger.warning("obsly: disabled, %s", exc)
+        _sdk_log.warning("obsly: disabled, %s", exc)
         _client = None
 
     return _client
@@ -207,6 +292,35 @@ def start_transaction(name: str, op: str = "custom", **kwargs: Any) -> Iterator[
         yield transaction
 
 
+class _Logger:
+    """`obsly.logger.info("...")` — the terse entry point for new code."""
+
+    def _log(self, level: str, body: str, **attributes: Any) -> None:
+        if _client is not None:
+            _client.capture_log(level, body, attributes=attributes or None)
+
+    def trace(self, body: str, **attributes: Any) -> None:
+        self._log("trace", body, **attributes)
+
+    def debug(self, body: str, **attributes: Any) -> None:
+        self._log("debug", body, **attributes)
+
+    def info(self, body: str, **attributes: Any) -> None:
+        self._log("info", body, **attributes)
+
+    def warning(self, body: str, **attributes: Any) -> None:
+        self._log("warning", body, **attributes)
+
+    def error(self, body: str, **attributes: Any) -> None:
+        self._log("error", body, **attributes)
+
+    def fatal(self, body: str, **attributes: Any) -> None:
+        self._log("fatal", body, **attributes)
+
+
+logger = _Logger()
+
+
 def capture_message(message: str, **kwargs: Any) -> str | None:
     return None if _client is None else _client.capture_message(message, **kwargs)
 
@@ -223,5 +337,6 @@ __all__ = [
     "flush",
     "get_client",
     "init",
+    "logger",
     "start_transaction",
 ]

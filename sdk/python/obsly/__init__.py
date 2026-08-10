@@ -15,14 +15,17 @@ from obsly.client import (
     flush,
     get_client,
     init,
+    logger,
     start_transaction,
 )
+from obsly.logs import ObslyLogHandler
 from obsly.tracing import get_current_span, start_span
 
 __version__ = "0.1.0"
 
 __all__ = [
     "Client",
+    "ObslyLogHandler",
     "__version__",
     "capture_exception",
     "capture_message",
@@ -30,6 +33,7 @@ __all__ = [
     "get_client",
     "get_current_span",
     "init",
+    "logger",
     "start_span",
     "start_transaction",
 ]
