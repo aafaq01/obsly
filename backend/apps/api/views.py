@@ -23,11 +23,14 @@ from apps.api.serializers import (
     EventSerializer,
     IssueDetailSerializer,
     IssueSerializer,
+    OrganizationSerializer,
+    ProjectDetailSerializer,
+    ProjectKeySerializer,
     ProjectSerializer,
 )
 from apps.events.models import Event
 from apps.issues.models import Issue, IssueStatus
-from apps.projects.models import Project
+from apps.projects.models import Organization, Project, ProjectKey
 
 HOURS = 24
 
@@ -38,7 +41,12 @@ SORTS = {
 }
 
 
-class ProjectListView(generics.ListAPIView[Project]):
+class OrganizationListView(generics.ListCreateAPIView[Organization]):
+    serializer_class = OrganizationSerializer
+    queryset = Organization.objects.all()
+
+
+class ProjectListView(generics.ListCreateAPIView[Project]):
     serializer_class = ProjectSerializer
 
     def get_queryset(self) -> QuerySet[Project]:
@@ -51,6 +59,43 @@ class ProjectListView(generics.ListAPIView[Project]):
             )
             .order_by("name")
         )
+
+
+class ProjectDetailView(generics.RetrieveAPIView[Project]):
+    """A project and its ingest keys — everything needed to wire an SDK up, in one response."""
+
+    serializer_class = ProjectDetailSerializer
+
+    def get_queryset(self) -> QuerySet[Project]:
+        return (
+            Project.objects.select_related("organization")
+            .prefetch_related("keys")
+            .annotate(
+                unresolved_count=Count(
+                    "issues", filter=Q(issues__status=IssueStatus.UNRESOLVED), distinct=True
+                )
+            )
+        )
+
+
+class ProjectKeyCreateView(generics.CreateAPIView[ProjectKey]):
+    """Issue an additional key.
+
+    Rotation is issue-new, migrate clients, revoke old. Without a second key that sequence is
+    an outage, which is why revoking is a flag rather than a delete.
+    """
+
+    serializer_class = ProjectKeySerializer
+
+    def perform_create(self, serializer: Any) -> None:
+        project = get_object_or_404(Project, pk=self.kwargs["project_id"])
+        serializer.save(project=project)
+
+
+class ProjectKeyUpdateView(generics.UpdateAPIView[ProjectKey]):
+    serializer_class = ProjectKeySerializer
+    queryset = ProjectKey.objects.all()
+    http_method_names = ["patch"]
 
 
 class IssueListView(generics.ListAPIView[Issue]):

@@ -7,6 +7,25 @@ export interface Project {
   unresolved_count: number
 }
 
+export interface Organization {
+  id: number
+  name: string
+  slug: string
+}
+
+export interface ProjectKey {
+  id: number
+  label: string
+  public_key: string
+  dsn: string
+  is_active: boolean
+  created_at: string
+}
+
+export interface ProjectDetail extends Project {
+  keys: ProjectKey[]
+}
+
 export interface Issue {
   id: number
   project: number
@@ -141,6 +160,20 @@ export const api = {
     post<Session>('/auth/login/', { username, password }),
   logout: () => post<Session>('/auth/logout/', {}),
   projects: () => get<Project[]>('/projects/'),
+  organizations: () => get<Organization[]>('/organizations/'),
+  createOrganization: (name: string, slug: string) =>
+    post<Organization>('/organizations/', { name, slug }),
+  project: (id: number) => get<ProjectDetail>(`/projects/${id}/`),
+  createProject: (body: {
+    name: string
+    slug: string
+    platform: string
+    organization_id: number
+  }) => post<Project>('/projects/', body),
+  createKey: (projectId: number, label: string) =>
+    post<ProjectKey>(`/projects/${projectId}/keys/`, { label }),
+  setKeyActive: (keyId: number, is_active: boolean) =>
+    patch<ProjectKey>(`/keys/${keyId}/`, { is_active }),
   issues: (projectId: number, params: URLSearchParams) =>
     get<Issue[]>(`/projects/${projectId}/issues/?${params.toString()}`),
   issue: (id: number) => get<IssueDetail>(`/issues/${id}/`),

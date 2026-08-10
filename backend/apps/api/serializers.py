@@ -1,19 +1,68 @@
 from typing import Any
 
+from django.conf import settings
 from rest_framework import serializers
 
 from apps.events.models import Event
 from apps.issues.models import Issue
-from apps.projects.models import Project
+from apps.projects.models import Organization, Project, ProjectKey
+
+
+class OrganizationSerializer(serializers.ModelSerializer[Organization]):
+    class Meta:
+        model = Organization
+        fields = ("id", "name", "slug")
+
+
+class ProjectKeySerializer(serializers.ModelSerializer[ProjectKey]):
+    dsn = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ProjectKey
+        fields = ("id", "label", "public_key", "dsn", "is_active", "created_at")
+
+    def get_dsn(self, obj: ProjectKey) -> str:
+        # From a setting, not the request: the host an operator browses on is not necessarily
+        # the host their services can reach.
+        return obj.dsn(settings.OBSLY_INGEST_ORIGIN)
 
 
 class ProjectSerializer(serializers.ModelSerializer[Project]):
     organization = serializers.CharField(source="organization.name", read_only=True)
-    unresolved_count = serializers.IntegerField(read_only=True)
+    organization_id = serializers.PrimaryKeyRelatedField(
+        source="organization", queryset=Organization.objects.all(), write_only=True
+    )
+    unresolved_count = serializers.IntegerField(read_only=True, default=0)
 
     class Meta:
         model = Project
-        fields = ("id", "name", "slug", "platform", "organization", "unresolved_count")
+        # Widened so ProjectDetailSerializer can add `keys`; without the annotation mypy infers
+        # a fixed-length tuple and any subclass overriding it is an error.
+        fields: tuple[str, ...] = (
+            "id",
+            "name",
+            "slug",
+            "platform",
+            "organization",
+            "organization_id",
+            "unresolved_count",
+        )
+
+
+class ProjectDetailSerializer(ProjectSerializer):
+    keys = ProjectKeySerializer(many=True, read_only=True)
+
+    class Meta(ProjectSerializer.Meta):
+        fields = (
+            "id",
+            "name",
+            "slug",
+            "platform",
+            "organization",
+            "organization_id",
+            "unresolved_count",
+            "keys",
+        )
 
 
 class IssueSerializer(serializers.ModelSerializer[Issue]):

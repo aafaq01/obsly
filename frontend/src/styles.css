@@ -589,3 +589,51 @@ pre.raw {
   color: #ffffff;
   filter: brightness(1.08);
 }
+
+/* --- nav + project settings ---------------------------------------------- */
+
+.topbar__nav {
+  display: flex;
+  gap: 16px;
+  font-size: 13.5px;
+  color: var(--ink-secondary);
+}
+
+.topbar__nav a:hover {
+  color: var(--series-1);
+}
+
+.keyrow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.keyrow:last-child {
+  border-bottom: none;
+}
+
+.keyrow__label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  margin-bottom: 5px;
+}
+
+.keyrow__dsn {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink-secondary);
+  overflow-wrap: anywhere;
+  display: block;
+}
+
+.keyrow__when {
+  font-size: 12px;
+  color: var(--ink-muted);
+  margin-top: 4px;
+}
