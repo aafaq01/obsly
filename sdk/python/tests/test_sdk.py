@@ -462,10 +462,12 @@ class TestErrorTraceCorrelation:
         client = Client(DSN, transport=transport, traces_sample_rate=1.0)  # type: ignore[arg-type]
         obsly.client._client = client
 
-        with client.start_transaction("/checkout", "http.server"):
-            with obsly.start_span("db.query", "SELECT 1") as span:
-                client.capture_exception(ValueError("boom"))
-                inner = span.span_id
+        with (
+            client.start_transaction("/checkout", "http.server"),
+            obsly.start_span("db.query", "SELECT 1") as span,
+        ):
+            client.capture_exception(ValueError("boom"))
+            inner = span.span_id
 
         errors = [e for e in transport.events() if e.get("type") != "transaction"]
         assert errors[0]["contexts"]["trace"]["span_id"] == inner
