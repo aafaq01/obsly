@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 
 import { api, type ExceptionValue, type Frame, type IssueDetail } from '../api'
 import { EventChart } from '../components/EventChart'
+import { StatusActions } from '../components/StatusActions'
 import { absoluteTime, relativeTime } from '../time'
 import { Notice } from '../components/Notice'
 import { handle } from '../errors'
@@ -33,12 +34,16 @@ export function IssueDetailPage() {
       <div className="detail-header">
         <h1 className="detail-title">{issue.title}</h1>
         {issue.culprit && <div className="detail-culprit">{issue.culprit}</div>}
+        <StatusActions
+          issueId={issue.id}
+          status={issue.status}
+          onChange={(status) => setDetail({ ...detail, issue: { ...issue, status } })}
+        />
       </div>
 
       <div className="stat-row">
         <Stat label="Events" value={issue.times_seen.toLocaleString()} />
         <Stat label="Level" value={issue.level} />
-        <Stat label="Status" value={issue.status} />
         <Stat label="First seen" value={relativeTime(issue.first_seen)} />
         <Stat label="Last seen" value={relativeTime(issue.last_seen)} />
       </div>

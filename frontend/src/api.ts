@@ -84,6 +84,32 @@ async function get<T>(path: string): Promise<T> {
   return (await response.json()) as T
 }
 
+/** Django sets this cookie; every unsafe method must echo it back or the request is a 403.
+ *  Read at call time rather than cached — a re-login rotates the token. */
+function csrfToken(): string {
+  return /(?:^|;\s*)csrftoken=([^;]*)/.exec(document.cookie)?.[1] ?? ''
+}
+
+async function patch<T>(path: string, body: unknown): Promise<T> {
+  const response = await fetch(`/api/0${path}`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      'X-CSRFToken': csrfToken(),
+    },
+    body: JSON.stringify(body),
+  })
+
+  if (response.status === 401 || response.status === 403) {
+    throw new UnauthorizedError('not signed in')
+  }
+  if (!response.ok) {
+    throw new Error(`${path} returned ${response.status}`)
+  }
+  return (await response.json()) as T
+}
+
 export const api = {
   me: () => get<{ username: string }>('/me/'),
   projects: () => get<Project[]>('/projects/'),
@@ -91,4 +117,5 @@ export const api = {
     get<Issue[]>(`/projects/${projectId}/issues/?${params.toString()}`),
   issue: (id: number) => get<IssueDetail>(`/issues/${id}/`),
   issueEvents: (id: number) => get<ObslyEvent[]>(`/issues/${id}/events/`),
+  setIssueStatus: (id: number, status: string) => patch<Issue>(`/issues/${id}/status/`, { status }),
 }

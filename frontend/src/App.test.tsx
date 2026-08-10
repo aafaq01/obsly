@@ -17,7 +17,8 @@ function mockApi(routes: Record<string, Route>) {
   // shorter one served the project list as the issue list.
   const keys = Object.keys(routes).sort((a, b) => b.length - a.length)
 
-  const fetchMock = vi.fn((url: string) => {
+  const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+    void init
     const match = keys.find((key) => url.startsWith(`/api/0${key}`))
     if (!match) {
       return Promise.resolve({ ok: false, status: 404, json: () => Promise.resolve({}) })
@@ -186,5 +187,69 @@ describe('relativeTime', () => {
 
   it('never shows a negative age for a clock-skewed future timestamp', () => {
     expect(relativeTime(new Date(Date.now() + 60_000).toISOString())).toBe('0s')
+  })
+})
+
+describe('StatusActions', () => {
+  const ISSUE_DETAIL = {
+    issue: { ...ISSUE, fingerprint: 'abc', fingerprint_components: ['ValueError'] },
+    latest_event: null,
+    tags: {},
+  }
+
+  function renderDetail() {
+    return render(
+      <MemoryRouter initialEntries={['/issues/9']}>
+        <App />
+      </MemoryRouter>,
+    )
+  }
+
+  it('offers only the transitions valid from the current status', async () => {
+    mockApi({
+      '/me/': { body: { username: 'admin' } },
+      '/issues/9/': { body: ISSUE_DETAIL },
+    })
+
+    renderDetail()
+
+    expect(await screen.findByRole('button', { name: 'Resolve' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Ignore' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Reopen' })).not.toBeInTheDocument()
+  })
+
+  it('sends the CSRF token from the cookie on a mutation', async () => {
+    document.cookie = 'csrftoken=token-from-cookie'
+    const fetchMock = mockApi({
+      '/me/': { body: { username: 'admin' } },
+      '/issues/9/status/': { body: { ...ISSUE, status: 'resolved' } },
+      '/issues/9/': { body: ISSUE_DETAIL },
+    })
+
+    renderDetail()
+    await userEvent.click(await screen.findByRole('button', { name: 'Resolve' }))
+
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find((c) => String(c[0]).includes('/status/'))
+      expect(call).toBeDefined()
+      const init = call?.[1]
+      expect(init?.method).toBe('PATCH')
+      expect((init?.headers as Record<string, string>)['X-CSRFToken']).toBe('token-from-cookie')
+    })
+  })
+
+  it('does not claim success when the server rejects the change', async () => {
+    mockApi({
+      '/me/': { body: { username: 'admin' } },
+      '/issues/9/status/': { status: 500, body: {} },
+      '/issues/9/': { body: ISSUE_DETAIL },
+    })
+
+    renderDetail()
+    await userEvent.click(await screen.findByRole('button', { name: 'Resolve' }))
+
+    // Still offering "Resolve" — the UI must not show a state the server never accepted.
+    expect(await screen.findByRole('button', { name: 'Resolve' })).toBeInTheDocument()
+    expect(screen.getByText(/returned 500/)).toBeInTheDocument()
   })
 })
