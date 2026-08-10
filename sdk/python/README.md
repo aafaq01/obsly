@@ -85,6 +85,7 @@ To forward the logging you already have, without editing a call site:
 
 ```python
 import logging
+
 logging.getLogger().addHandler(obsly.ObslyLogHandler())
 ```
 
