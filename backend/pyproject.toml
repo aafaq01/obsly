@@ -8,6 +8,8 @@ dependencies = [
     "djangorestframework>=3.17",
     "psycopg[binary]>=3.3",
     "django-environ>=0.12",
+    # Runtime, not dev: settings.py calls monkeypatch() so admin generics work at import time.
+    "django-stubs-ext>=5.1",
     "gunicorn>=23.0",
     "whitenoise>=6.8",
 ]
@@ -46,6 +48,10 @@ select = [
 ]
 ignore = [
     "S101",  # assert is how pytest asserts
+    # Django's entire configuration style is mutable class attributes — Meta.ordering,
+    # Meta.constraints, ModelAdmin.inlines. Annotating every one as ClassVar is noise that
+    # obscures the handful of places where a mutable default is genuinely a bug.
+    "RUF012",
 ]
 
 [tool.ruff.lint.per-file-ignores]
@@ -92,6 +98,6 @@ env = [
 ]
 
 [tool.coverage.run]
-source = ["config"]
+source = ["config", "apps"]
 # wsgi/asgi are framework entry points — covering them would test Django, not Obsly.
 omit = ["*/migrations/*", "*/tests/*", "*/wsgi.py", "*/asgi.py"]
