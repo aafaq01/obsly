@@ -3,10 +3,10 @@ import { Link, useParams } from 'react-router-dom'
 
 import { api, type ExceptionValue, type Frame, type IssueDetail } from '../api'
 import { EventChart } from '../components/EventChart'
-import { StatusActions } from '../components/StatusActions'
-import { absoluteTime, relativeTime } from '../time'
 import { Notice } from '../components/Notice'
+import { StatusActions } from '../components/StatusActions'
 import { handle } from '../errors'
+import { absoluteTime, relativeTime } from '../time'
 
 export function IssueDetailPage() {
   const { issueId } = useParams()
@@ -25,10 +25,8 @@ export function IssueDetailPage() {
 
   return (
     <>
-      <p style={{ marginBottom: 12 }}>
-        <Link to={`/projects/${issue.project}/issues`} style={{ color: 'var(--series-1)' }}>
-          ← Back to issues
-        </Link>
+      <p className="crumb">
+        <Link to={`/projects/${issue.project}/issues`}>← Issues</Link>
       </p>
 
       <div className="detail-header">
@@ -41,66 +39,72 @@ export function IssueDetailPage() {
         />
       </div>
 
-      <div className="stat-row">
-        <Stat label="Events" value={issue.times_seen.toLocaleString()} />
-        <Stat label="Level" value={issue.level} />
-        <Stat label="First seen" value={relativeTime(issue.first_seen)} />
-        <Stat label="Last seen" value={relativeTime(issue.last_seen)} />
-      </div>
+      {/* One dense line rather than a row of oversized tiles. These are reference values you
+          glance at; the stack trace is the headline of the page. */}
+      <dl className="meta">
+        <Meta label="Events" value={issue.times_seen.toLocaleString()} />
+        <Meta label="Level" value={issue.level} />
+        <Meta label="First seen" value={relativeTime(issue.first_seen)} />
+        <Meta label="Last seen" value={relativeTime(issue.last_seen)} />
+        {event?.release && <Meta label="Release" value={event.release} />}
+        {event?.environment && <Meta label="Environment" value={event.environment} />}
+      </dl>
 
-      <div className="section">
-        <h2 className="section__title">Events per hour · last 24 hours</h2>
-        <div className="card" style={{ padding: 16 }}>
-          <EventChart hourly={issue.hourly} />
-        </div>
-      </div>
+      <div className="issue-grid">
+        <div className="issue-grid__main">
+          <section>
+            <h2 className="section__title">Stack trace · most recent event</h2>
+            {event && event.exception.length > 0 ? (
+              event.exception.map((value, index) => (
+                <ExceptionBlock
+                  key={index}
+                  value={value}
+                  isLast={index === event.exception.length - 1}
+                />
+              ))
+            ) : (
+              <Notice>{event?.message || 'This event carried no stack trace.'}</Notice>
+            )}
+          </section>
 
-      <div className="grid-2 section">
-        <div>
-          <h2 className="section__title">Stack trace · most recent event</h2>
-          {event && event.exception.length > 0 ? (
-            event.exception.map((value, index) => (
-              <ExceptionBlock
-                key={index}
-                value={value}
-                isLast={index === event.exception.length - 1}
-              />
-            ))
-          ) : (
-            <Notice>{event?.message || 'This event carried no stack trace.'}</Notice>
-          )}
-
+          {/* Collapsed. The payload is a debugging escape hatch, not the page — open it was
+              two screens of JSON pushing the stack trace out of view. */}
           {event && (
-            <div className="section">
-              <h2 className="section__title">Raw payload</h2>
+            <details className="collapse">
+              <summary>Raw payload</summary>
               <pre className="raw">{JSON.stringify(event.payload, null, 2)}</pre>
-            </div>
+            </details>
           )}
         </div>
 
-        <div>
-          <h2 className="section__title">Event detail</h2>
-          <div className="card" style={{ padding: 14 }}>
-            <dl className="kv">
-              <dt>Event ID</dt>
-              <dd>{event?.id ?? '—'}</dd>
-              <dt>When</dt>
-              <dd>{event ? absoluteTime(event.timestamp) : '—'}</dd>
-              <dt>Release</dt>
-              <dd>{event?.release || '—'}</dd>
-              <dt>Environment</dt>
-              <dd>{event?.environment || '—'}</dd>
-              <dt>Server</dt>
-              <dd>{event?.server_name || '—'}</dd>
-              <dt>Platform</dt>
-              <dd>{event?.platform || '—'}</dd>
-            </dl>
-          </div>
+        <aside className="issue-grid__side">
+          <section>
+            <h2 className="section__title">Events per hour</h2>
+            <div className="card card--tight">
+              <EventChart hourly={issue.hourly} />
+            </div>
+          </section>
+
+          <section>
+            <h2 className="section__title">Latest event</h2>
+            <div className="card card--tight">
+              <dl className="kv">
+                <dt>Event ID</dt>
+                <dd>{event ? `${event.id.slice(0, 18)}…` : '—'}</dd>
+                <dt>When</dt>
+                <dd>{event ? absoluteTime(event.timestamp) : '—'}</dd>
+                <dt>Server</dt>
+                <dd>{event?.server_name || '—'}</dd>
+                <dt>Platform</dt>
+                <dd>{event?.platform || '—'}</dd>
+              </dl>
+            </div>
+          </section>
 
           {Object.keys(tags).length > 0 && (
-            <div className="section">
+            <section>
               <h2 className="section__title">Tags</h2>
-              <div className="card" style={{ padding: 14 }}>
+              <div className="card card--tight">
                 {Object.entries(tags).map(([key, values]) => (
                   <div className="tag-group" key={key}>
                     <div className="tag-group__key">{key}</div>
@@ -116,52 +120,48 @@ export function IssueDetailPage() {
                   </div>
                 ))}
               </div>
-            </div>
+            </section>
           )}
 
-          <div className="section">
-            <h2 className="section__title">Why these grouped</h2>
-            <div className="card" style={{ padding: 14 }}>
-              <div className="frames">
-                {issue.fingerprint_components.map((component, index) => (
-                  <div className="frame" key={index}>
-                    {component}
-                  </div>
-                ))}
-              </div>
+          <details className="collapse">
+            <summary>Why these grouped</summary>
+            <div className="frames">
+              {issue.fingerprint_components.map((component, index) => (
+                <div className="frame" key={index}>
+                  {component}
+                </div>
+              ))}
             </div>
-          </div>
-        </div>
+          </details>
+        </aside>
       </div>
     </>
   )
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function Meta({ label, value }: { label: string; value: string }) {
   return (
-    <div>
-      <div className="stat__value">{value}</div>
-      <div className="stat__label">{label}</div>
+    <div className="meta__item">
+      <dt>{label}</dt>
+      <dd>{value}</dd>
     </div>
   )
 }
 
 function ExceptionBlock({ value, isLast }: { value: ExceptionValue; isLast: boolean }) {
   const inApp = value.frames.filter((frame) => frame.in_app)
-  // Collapsed by default: the whole reason in_app exists is that a 41-frame trace with two
-  // frames of your code in the middle is unreadable.
+  // Collapsed by default: the whole reason in_app is computed is that a 41-frame trace with
+  // three frames of your code buried in it is unreadable.
   const [showAll, setShowAll] = useState(inApp.length === 0)
   const shown = showAll ? value.frames : inApp
   const hidden = value.frames.length - shown.length
 
   return (
-    <div style={{ marginBottom: 16 }}>
-      <p style={{ margin: '0 0 8px', fontWeight: 600 }}>
-        {value.type}
-        {value.value && <span style={{ fontWeight: 400 }}>: {value.value}</span>}
-        {!isLast && (
-          <span style={{ color: 'var(--ink-muted)', fontWeight: 400 }}> — caused the next</span>
-        )}
+    <div className="exc">
+      <p className="exc__head">
+        <span className="exc__type">{value.type}</span>
+        {value.value && <span className="exc__value">{value.value}</span>}
+        {!isLast && <span className="exc__chain">caused the next</span>}
       </p>
       <div className="card">
         {hidden > 0 && (
@@ -183,7 +183,7 @@ function FrameRow({ frame }: { frame: Frame }) {
   return (
     <div className={frame.in_app ? 'frame frame--in-app' : 'frame'}>
       <span className="frame__lineno">{frame.lineno ?? '—'}</span>
-      <span>
+      <span className="frame__where">
         {frame.module || frame.filename} in <strong>{frame.function}</strong>
       </span>
     </div>
