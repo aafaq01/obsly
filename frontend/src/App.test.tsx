@@ -202,20 +202,32 @@ describe('EventChart', () => {
     expect(screen.getByRole('img')).toHaveAccessibleName(/6 total/)
   })
 
-  it('shows a count on hover', async () => {
-    render(<EventChart hourly={[0, 5]} />)
+  it('shows the total and the peak without needing a hover', () => {
+    // A tooltip that is the only route to a number is unreachable by keyboard and gone the
+    // moment you look away.
+    render(<EventChart hourly={[0, 5, 3]} />)
 
-    const targets = document.querySelectorAll('rect[fill="transparent"]')
-    await userEvent.hover(targets[1] as Element)
+    expect(screen.getByText(/8/)).toBeInTheDocument()
+    expect(screen.getByText(/peak 5/)).toBeInTheDocument()
+  })
 
-    expect(await screen.findByRole('status')).toHaveTextContent('5 events')
+  it('labels the axis so the window is readable without hovering', () => {
+    render(<EventChart hourly={Array<number>(24).fill(1)} />)
+
+    expect(screen.getByText('24h ago')).toBeInTheDocument()
+    expect(screen.getByText('now')).toBeInTheDocument()
+  })
+
+  it('offers a table view of the values', () => {
+    render(<EventChart hourly={[0, 7]} />)
+
+    expect(screen.getByRole('button', { name: /table/i })).toBeInTheDocument()
   })
 
   it('renders a baseline tick for an empty hour', () => {
-    // Otherwise "no events this hour" is indistinguishable from "the chart failed to draw".
     render(<EventChart hourly={[0, 0, 0]} />)
 
-    expect(document.querySelectorAll('.chart__bar--empty')).toHaveLength(3)
+    expect(document.querySelectorAll('.bars__bar--empty')).toHaveLength(3)
   })
 })
 

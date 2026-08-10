@@ -4,9 +4,12 @@ import { Link, Navigate, Route, Routes } from 'react-router-dom'
 import { api } from './api'
 import { IssueDetailPage } from './pages/IssueDetailPage'
 import { Notice } from './components/Notice'
+import { ProjectNav } from './components/ProjectNav'
 import { Issues } from './pages/Issues'
 import { Login } from './pages/Login'
 import { Performance } from './pages/Performance'
+import { TraceDetail } from './pages/TraceDetail'
+import { Traces } from './pages/Traces'
 import { ProjectSettings } from './pages/ProjectSettings'
 import { Projects } from './pages/Projects'
 
@@ -36,7 +39,6 @@ export function App() {
         </Link>
         {auth.state === 'in' && (
           <nav className="topbar__nav">
-            <Link to="/">Issues</Link>
             <Link to="/projects">Projects</Link>
           </nav>
         )}
@@ -61,6 +63,8 @@ export function App() {
           <Login onSignedIn={(username) => setAuth({ state: 'in', username })} />
         )}
 
+        {auth.state === 'in' && <ProjectNav />}
+
         {auth.state === 'in' && (
           <Routes>
             <Route path="/" element={<Issues />} />
@@ -68,6 +72,8 @@ export function App() {
             <Route path="/issues/:issueId" element={<IssueDetailPage />} />
             <Route path="/projects" element={<Projects />} />
             <Route path="/projects/:projectId/performance" element={<Performance />} />
+            <Route path="/projects/:projectId/traces" element={<Traces />} />
+            <Route path="/traces/:traceId" element={<TraceDetail />} />
             <Route path="/projects/:projectId/settings" element={<ProjectSettings />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

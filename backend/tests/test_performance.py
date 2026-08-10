@@ -164,3 +164,73 @@ class TestPercentiles:
         response = client.get(reverse("api:performance", args=[project.pk]), secure=True)
 
         assert response.status_code == 403
+
+
+class TestTraces:
+    def test_lists_traces_slowest_first(self, staff_client: Client, project: Project) -> None:
+        """Sorted by time shows what happened last; sorted by duration shows what to look at."""
+        make(project, "/slow", [900.0])
+        make(project, "/fast", [5.0])
+
+        rows = json_body(staff_client.get(reverse("api:traces", args=[project.pk]), secure=True))
+
+        assert [row["name"] for row in rows] == ["/slow", "/fast"]
+
+    def test_can_sort_by_recency_instead(self, staff_client: Client, project: Project) -> None:
+        make(project, "/slow", [900.0], minutes_ago=30)
+        make(project, "/fast", [5.0], minutes_ago=1)
+
+        url = reverse("api:traces", args=[project.pk])
+        rows = json_body(staff_client.get(f"{url}?sort=recent", secure=True))
+
+        assert rows[0]["name"] == "/fast"
+
+    def test_filters_to_failures(self, staff_client: Client, project: Project) -> None:
+        make(project, "/ok", [10.0])
+        make(project, "/broken", [10.0], status=SpanStatus.INTERNAL_ERROR)
+
+        url = reverse("api:traces", args=[project.pk])
+        rows = json_body(staff_client.get(f"{url}?status=failed", secure=True))
+
+        assert [row["name"] for row in rows] == ["/broken"]
+
+    def test_filters_to_one_endpoint(self, staff_client: Client, project: Project) -> None:
+        make(project, "/a", [10.0] * 3)
+        make(project, "/b", [10.0])
+
+        url = reverse("api:traces", args=[project.pk])
+        rows = json_body(staff_client.get(f"{url}?name=/a", secure=True))
+
+        assert len(rows) == 3
+
+    def test_detail_returns_the_spans_for_the_waterfall(
+        self, staff_client: Client, project: Project
+    ) -> None:
+        from apps.tracing.models import Span
+
+        make(project, "/checkout", [250.0])
+        transaction = Transaction.objects.get()
+        Span.objects.create(
+            transaction=transaction,
+            trace_id=transaction.trace_id,
+            span_id="c" * 16,
+            parent_span_id=transaction.span_id,
+            op="db.query",
+            description="SELECT 1",
+            start_timestamp=transaction.start_timestamp,
+            timestamp=transaction.timestamp,
+            duration_ms=140.0,
+        )
+
+        payload = json_body(
+            staff_client.get(reverse("api:trace", args=[transaction.pk]), secure=True)
+        )
+
+        assert payload["span_count"] == 1
+        assert payload["spans"][0]["op"] == "db.query"
+        assert payload["spans"][0]["duration_ms"] == 140.0
+
+    def test_requires_authentication(self, client: Client, project: Project) -> None:
+        response = client.get(reverse("api:traces", args=[project.pk]), secure=True)
+
+        assert response.status_code == 403
