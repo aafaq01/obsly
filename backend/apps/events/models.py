@@ -46,6 +46,11 @@ class Event(TimestampedModel):
     exception_value = models.TextField(blank=True)
     culprit = models.CharField(max_length=512, blank=True)
 
+    # The join key between an error and the request it happened inside. Indexed because
+    # "show me everything from this trace" is the query the whole correlation story rests on.
+    trace_id = models.CharField(max_length=32, blank=True, db_index=True)
+    span_id = models.CharField(max_length=16, blank=True)
+
     environment = models.CharField(max_length=64, blank=True, db_index=True)
     release = models.CharField(max_length=128, blank=True, db_index=True)
     server_name = models.CharField(max_length=256, blank=True)

@@ -1084,3 +1084,71 @@ pre.raw {
     grid-template-columns: 1fr;
   }
 }
+
+/* --- correlation ---------------------------------------------------------- */
+
+/* The link between an error and the request it happened inside. Given its own banner rather
+   than buried in a metadata list, because following it is the point of recording both. */
+.correlate {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  margin-bottom: 18px;
+  border: 1px solid color-mix(in srgb, var(--series-1) 40%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--series-1) 8%, var(--surface));
+  font-size: 13px;
+}
+
+.correlate__label {
+  color: var(--ink-secondary);
+}
+
+.correlate code {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.correlate__meta {
+  color: var(--ink-muted);
+  font-size: 12.5px;
+}
+
+.correlate__go {
+  margin-left: auto;
+  color: var(--series-1);
+  font-weight: 600;
+}
+
+.correlate-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+
+.correlate-row:last-child {
+  border-bottom: none;
+}
+
+.correlate-row:hover {
+  background: color-mix(in srgb, var(--series-1) 6%, var(--surface));
+}
+
+.correlate-row__title {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.correlate-row__go {
+  margin-left: auto;
+  color: var(--series-1);
+  white-space: nowrap;
+}

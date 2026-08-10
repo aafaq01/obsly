@@ -641,3 +641,132 @@ describe('Issue detail layout', () => {
     expect(screen.getByRole('button', { name: /1 more system frame/ })).toBeInTheDocument()
   })
 })
+
+describe('Correlation', () => {
+  const EVENT = {
+    id: '6ba7b810-9dad-11d1-80b4-00c04fd430c8',
+    timestamp: new Date().toISOString(),
+    received_at: new Date().toISOString(),
+    level: 'error',
+    platform: 'python',
+    message: '',
+    exception_type: 'ConnectionError',
+    exception_value: '502',
+    culprit: 'main in checkout',
+    environment: 'production',
+    release: 'demo@1.3.0',
+    server_name: 'web-1',
+    trace_id: 'a'.repeat(32),
+    span_id: 'b'.repeat(16),
+    tags: {},
+    exception: [{ type: 'ConnectionError', value: '502', frames: [] }],
+    payload: {},
+  }
+
+  it('links an issue to the request it happened inside', async () => {
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/issues/9/': {
+        body: {
+          issue: { ...ISSUE, fingerprint: 'f', fingerprint_components: [] },
+          latest_event: EVENT,
+          tags: {},
+          trace: {
+            id: 'trace-uuid',
+            name: '/checkout/{cart_id}',
+            duration_ms: 131,
+            status: 'internal_error',
+          },
+        },
+      },
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/issues/9']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('/checkout/{cart_id}')).toBeInTheDocument()
+    expect(screen.getByText(/View trace/)).toBeInTheDocument()
+  })
+
+  it('shows no trace banner when the error happened outside one', async () => {
+    // A dead link is worse than admitting there is nothing to link to.
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/issues/9/': {
+        body: {
+          issue: { ...ISSUE, fingerprint: 'f', fingerprint_components: [] },
+          latest_event: { ...EVENT, trace_id: '' },
+          tags: {},
+          trace: null,
+        },
+      },
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/issues/9']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    await screen.findByText('ValueError: cart is empty')
+    expect(screen.queryByText(/View trace/)).not.toBeInTheDocument()
+  })
+
+  it('lists the errors that happened inside a trace', async () => {
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/traces/trace-uuid/': {
+        body: {
+          id: 'trace-uuid',
+          trace_id: 'a'.repeat(32),
+          span_id: 'b'.repeat(16),
+          name: '/checkout/{cart_id}',
+          op: 'http.server',
+          status: 'internal_error',
+          start_timestamp: new Date().toISOString(),
+          timestamp: new Date().toISOString(),
+          duration_ms: 131,
+          environment: 'production',
+          release: 'demo@1.3.0',
+          span_count: 1,
+          spans: [
+            {
+              span_id: 'c'.repeat(16),
+              parent_span_id: 'b'.repeat(16),
+              op: 'http.client',
+              description: 'POST payments.example.com/charge',
+              status: 'internal_error',
+              start_timestamp: new Date().toISOString(),
+              timestamp: new Date().toISOString(),
+              duration_ms: 111.7,
+              data: {},
+            },
+          ],
+          errors: [
+            {
+              id: 'e1',
+              issue_id: 9,
+              title: 'ConnectionError: 502',
+              level: 'error',
+              timestamp: new Date().toISOString(),
+              span_id: 'c'.repeat(16),
+            },
+          ],
+        },
+      },
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/traces/trace-uuid']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('Errors in this request')).toBeInTheDocument()
+    expect(screen.getByText('ConnectionError: 502')).toBeInTheDocument()
+    expect(screen.getByText('POST payments.example.com/charge')).toBeInTheDocument()
+  })
+})

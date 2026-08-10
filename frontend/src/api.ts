@@ -90,8 +90,18 @@ export interface TraceSummary {
   span_count: number
 }
 
+export interface CorrelatedError {
+  id: string
+  issue_id: number | null
+  title: string
+  level: string
+  timestamp: string
+  span_id: string
+}
+
 export interface TraceDetail extends TraceSummary {
   spans: TraceSpan[]
+  errors: CorrelatedError[]
 }
 
 export interface Frame {
@@ -121,6 +131,8 @@ export interface ObslyEvent {
   environment: string
   release: string
   server_name: string
+  trace_id: string
+  span_id: string
   tags: Record<string, string>
   exception: ExceptionValue[]
   payload: Record<string, unknown>
@@ -136,6 +148,8 @@ export interface IssueDetail {
   issue: Issue & { fingerprint: string; fingerprint_components: string[] }
   latest_event: ObslyEvent | null
   tags: Record<string, TagValue[]>
+  /** The request this error happened inside, when both were recorded. */
+  trace: { id: string; name: string; duration_ms: number; status: string } | null
 }
 
 /** Thrown when the session is missing or expired, so callers can show a sign-in prompt

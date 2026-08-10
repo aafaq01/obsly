@@ -54,12 +54,32 @@ def event_from_payload(
         exception_type=_text(exception_type, "exception_type"),
         exception_value=str(exception_value or "")[:4000],
         culprit=_text(culprit, "culprit"),
+        trace_id=_trace_field(payload, "trace_id", 32),
+        span_id=_trace_field(payload, "span_id", 16),
         environment=_text(payload.get("environment"), "environment"),
         release=_text(payload.get("release"), "release"),
         server_name=_text(payload.get("server_name"), "server_name"),
         tags=_tags(payload.get("tags")),
         payload=payload,
     )
+
+
+def _trace_field(payload: dict[str, Any], key: str, length: int) -> str:
+    """Read contexts.trace.<key>, or empty when the error happened outside a trace.
+
+    Validated as hex of the exact length: a junk value here would silently point an error at a
+    trace that does not exist, which is worse than admitting there is no link.
+    """
+    contexts = payload.get("contexts")
+    trace = contexts.get("trace") if isinstance(contexts, dict) else None
+    value = trace.get(key) if isinstance(trace, dict) else None
+
+    if not isinstance(value, str):
+        return ""
+    value = value.strip().lower()
+    if len(value) != length or not all(c in "0123456789abcdef" for c in value):
+        return ""
+    return value
 
 
 def _event_id(raw: Any) -> uuid.UUID:

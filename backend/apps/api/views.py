@@ -21,6 +21,7 @@ from rest_framework.views import APIView
 
 from apps.api.performance import endpoint_summary, window
 from apps.api.serializers import (
+    CorrelatedErrorSerializer,
     EventSerializer,
     IssueDetailSerializer,
     IssueSerializer,
@@ -189,6 +190,24 @@ class TraceDetailView(generics.RetrieveAPIView[Transaction]):
     def get_queryset(self) -> QuerySet[Transaction]:
         return Transaction.objects.prefetch_related("spans").annotate(span_count=Count("spans"))
 
+    def retrieve(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        trace = self.get_object()
+
+        # Errors recorded inside this request. This is the correlation: same trace_id, no
+        # timestamp guessing, no "these probably happened together".
+        errors = (
+            Event.objects.filter(project_id=trace.project_id, trace_id=trace.trace_id)
+            .select_related("issue")
+            .order_by("timestamp")[:50]
+        )
+
+        return Response(
+            {
+                **self.get_serializer(trace).data,
+                "errors": CorrelatedErrorSerializer(errors, many=True).data,
+            }
+        )
+
 
 class IssueListView(generics.ListAPIView[Issue]):
     serializer_class = IssueSerializer
@@ -232,11 +251,21 @@ class IssueDetailView(generics.RetrieveAPIView[Issue]):
 
         latest = Event.objects.filter(issue=issue).order_by("-timestamp").first()
 
+        # The transaction this error happened inside, if any — the other half of the link.
+        trace = None
+        if latest is not None and latest.trace_id:
+            trace = (
+                Transaction.objects.filter(project_id=issue.project_id, trace_id=latest.trace_id)
+                .values("id", "name", "duration_ms", "status")
+                .first()
+            )
+
         return Response(
             {
                 "issue": self.get_serializer(issue).data,
                 "latest_event": EventSerializer(latest).data if latest else None,
                 "tags": _tag_distribution(issue),
+                "trace": trace,
             }
         )
 
