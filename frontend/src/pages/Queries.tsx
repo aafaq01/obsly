@@ -5,10 +5,25 @@ import { api, type SpanInsights } from '../api'
 import { Magnitude } from '../components/Magnitude'
 import { Notice, Skeleton } from '../components/Notice'
 import { PeriodPicker } from '../components/PeriodPicker'
+import { RankChart } from '../components/RankChart'
 import { handle } from '../errors'
 import { columnMax, formatMs } from '../format'
 
 type SortKey = 'total_ms' | 'p95' | 'count' | 'per_transaction'
+
+const SORT_LABEL: Record<SortKey, string> = {
+  total_ms: 'time spent',
+  p95: 'p95 duration',
+  count: 'call count',
+  per_transaction: 'calls per request',
+}
+
+const SORT_FORMAT: Record<SortKey, (value: number) => string> = {
+  total_ms: (value) => formatMs(value),
+  p95: (value) => formatMs(value),
+  count: (value) => value.toLocaleString(),
+  per_transaction: (value) => `${value}×`,
+}
 
 /**
  * Spans aggregated by what they do.
@@ -93,59 +108,82 @@ export function Queries() {
           queries automatically.
         </Notice>
       ) : (
-        <div className="card" style={{ overflowX: 'auto' }}>
-          <table className="perf">
-            <thead>
-              <tr>
-                <th>Span</th>
-                <th className="num">Calls</th>
-                <th className="num">Per request</th>
-                <th className="num">p50</th>
-                <th className="num">p95</th>
-                <th className="num">Time spent</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
-                <tr key={`${row.op}:${row.description}`} className="perf__row">
-                  <td>
-                    <Link
-                      className="perf__link"
-                      to={
-                        `/projects/${id}/span?period=${period}` +
-                        `&op=${encodeURIComponent(row.op)}` +
-                        `&description=${encodeURIComponent(row.description)}`
-                      }
-                    >
-                      <span className="perf__name">{row.description || '(no description)'}</span>
-                      <span className="perf__op">{row.op}</span>
-                    </Link>
-                  </td>
-                  <Magnitude value={row.count} max={maxCalls} lead={sort === 'count'}>
-                    {row.count.toLocaleString()}
-                  </Magnitude>
-                  {/* Above ~5 for a db.query this is the signature of an N+1: the same
-                      statement running once per row of some earlier result. */}
-                  <td className={`num ${row.per_transaction >= 5 ? 'bad' : ''}`}>
-                    {row.per_transaction}
-                    {row.per_transaction >= 5 && row.op === 'db.query' && (
-                      <span className="tag-n1" title="Repeated many times within one request">
-                        N+1?
-                      </span>
-                    )}
-                  </td>
-                  <td className="num">{formatMs(row.p50)}</td>
-                  <Magnitude value={row.p95} max={maxP95} className="strong" lead={sort === 'p95'}>
-                    {formatMs(row.p95)}
-                  </Magnitude>
-                  <Magnitude value={row.total_ms} max={maxTotal} lead={sort === 'total_ms'}>
-                    {formatMs(row.total_ms)}
-                  </Magnitude>
+        <>
+          <div className="card card--tight" style={{ marginBottom: 'var(--s4)' }}>
+            <RankChart
+              rows={rows.map((row) => ({
+                label: row.description || '(no description)',
+                sublabel: row.op,
+                value: row[sort],
+                href:
+                  `/projects/${id}/span?period=${period}` +
+                  `&op=${encodeURIComponent(row.op)}` +
+                  `&description=${encodeURIComponent(row.description)}`,
+              }))}
+              format={SORT_FORMAT[sort]}
+              caption={`Bar length is ${SORT_LABEL[sort]}, relative to the highest`}
+            />
+          </div>
+
+          <div className="card" style={{ overflowX: 'auto' }}>
+            <table className="perf">
+              <thead>
+                <tr>
+                  <th>Span</th>
+                  <th className="num">Calls</th>
+                  <th className="num">Per request</th>
+                  <th className="num">p50</th>
+                  <th className="num">p95</th>
+                  <th className="num">Time spent</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <tr key={`${row.op}:${row.description}`} className="perf__row">
+                    <td>
+                      <Link
+                        className="perf__link"
+                        to={
+                          `/projects/${id}/span?period=${period}` +
+                          `&op=${encodeURIComponent(row.op)}` +
+                          `&description=${encodeURIComponent(row.description)}`
+                        }
+                      >
+                        <span className="perf__name">{row.description || '(no description)'}</span>
+                        <span className="perf__op">{row.op}</span>
+                      </Link>
+                    </td>
+                    <Magnitude value={row.count} max={maxCalls} lead={sort === 'count'}>
+                      {row.count.toLocaleString()}
+                    </Magnitude>
+                    {/* Above ~5 for a db.query this is the signature of an N+1: the same
+                      statement running once per row of some earlier result. */}
+                    <td className={`num ${row.per_transaction >= 5 ? 'bad' : ''}`}>
+                      {row.per_transaction}
+                      {row.per_transaction >= 5 && row.op === 'db.query' && (
+                        <span className="tag-n1" title="Repeated many times within one request">
+                          N+1?
+                        </span>
+                      )}
+                    </td>
+                    <td className="num">{formatMs(row.p50)}</td>
+                    <Magnitude
+                      value={row.p95}
+                      max={maxP95}
+                      className="strong"
+                      lead={sort === 'p95'}
+                    >
+                      {formatMs(row.p95)}
+                    </Magnitude>
+                    <Magnitude value={row.total_ms} max={maxTotal} lead={sort === 'total_ms'}>
+                      {formatMs(row.total_ms)}
+                    </Magnitude>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
 
       <p className="page-subtitle" style={{ marginTop: 14 }}>

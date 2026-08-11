@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 
 import { api, type ProjectDetail, type ProjectKey } from '../api'
+import { Breadcrumbs } from '../components/Breadcrumbs'
 import { Notice } from '../components/Notice'
 import { handle } from '../errors'
 import { absoluteTime } from '../time'
@@ -38,11 +39,7 @@ export function ProjectSettings() {
 
   return (
     <>
-      <p style={{ marginBottom: 12 }}>
-        <Link to={`/projects/${project.id}/issues`} style={{ color: 'var(--series-1)' }}>
-          ← Back to issues
-        </Link>
-      </p>
+      <Breadcrumbs trail={[{ label: 'Projects', to: '/projects' }, { label: project.name }]} />
 
       <h1 className="page-title">{project.name}</h1>
       <p className="page-subtitle">

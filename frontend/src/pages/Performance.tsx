@@ -6,10 +6,25 @@ import { EventChart } from '../components/EventChart'
 import { Magnitude } from '../components/Magnitude'
 import { Notice, Skeleton } from '../components/Notice'
 import { PeriodPicker } from '../components/PeriodPicker'
+import { RankChart } from '../components/RankChart'
 import { handle } from '../errors'
-import { bucketLabel, columnMax } from '../format'
+import { bucketLabel, columnMax, formatMs } from '../format'
 
 type SortKey = 'total_ms' | 'p95' | 'count' | 'failure_rate'
+
+const SORT_LABEL: Record<SortKey, string> = {
+  total_ms: 'time spent',
+  p95: 'p95 latency',
+  count: 'request count',
+  failure_rate: 'failure rate',
+}
+
+const SORT_FORMAT: Record<SortKey, (value: number) => string> = {
+  total_ms: (value) => formatMs(value),
+  p95: (value) => formatMs(value),
+  count: (value) => value.toLocaleString(),
+  failure_rate: (value) => `${(value * 100).toFixed(1)}%`,
+}
 
 export function Performance() {
   const { projectId } = useParams()
@@ -82,6 +97,25 @@ export function Performance() {
           </h2>
           <div className="card" style={{ padding: 16 }}>
             <EventChart hourly={data.summary.series} bucketSeconds={data.summary.bucket_seconds} />
+          </div>
+        </div>
+      )}
+
+      {rows.length > 0 && (
+        <div className="section">
+          <h2 className="section__title">Top endpoints by {SORT_LABEL[sort]}</h2>
+          <div className="card card--tight">
+            {/* Ranked by whatever the table is sorted by, so the chart and the table can never
+              tell different stories about the same window. */}
+            <RankChart
+              rows={rows.map((row) => ({
+                label: row.name,
+                sublabel: row.op,
+                value: row[sort],
+              }))}
+              format={SORT_FORMAT[sort]}
+              caption={`Bar length is ${SORT_LABEL[sort]}, relative to the highest`}
+            />
           </div>
         </div>
       )}

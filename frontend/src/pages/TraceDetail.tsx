@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 
 import { api, type TraceDetail as Detail } from '../api'
+import { Breadcrumbs } from '../components/Breadcrumbs'
 import { LogList } from '../components/LogList'
 import { Notice } from '../components/Notice'
 import { handle } from '../errors'
@@ -26,6 +27,10 @@ export function TraceDetail() {
 
   return (
     <>
+      <Breadcrumbs
+        trail={[{ label: 'Traces', to: `/projects/${projectId}/traces` }, { label: trace.name }]}
+      />
+
       <h1 className="detail-title">{trace.name}</h1>
       <div className="detail-culprit">
         {trace.op} · trace {trace.trace_id.slice(0, 16)}…
