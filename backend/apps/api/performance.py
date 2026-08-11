@@ -8,7 +8,8 @@ p99 says plainly that one request in a hundred is unusable.
 from datetime import datetime
 from typing import Any
 
-from django.db.models import Aggregate, Count, F, FloatField, Q, Sum
+from django.db.models import Aggregate, Count, F, FloatField, Max, Q, QuerySet, Sum, Value
+from django.db.models.functions import Floor, Least
 
 from apps.api.timewindow import resolve
 from apps.tracing.models import Span, SpanStatus, Transaction
@@ -131,3 +132,128 @@ def span_ops(project_id: int, period: str) -> list[str]:
         .values_list("op", flat=True)
         .distinct()
     )
+
+
+def span_detail(
+    project_id: int, period: str, *, op: str, description: str
+) -> dict[str, Any] | None:
+    """One span group: its distribution, who calls it, and traces to open.
+
+    The aggregate says a query is expensive. This says which endpoints make it expensive and
+    gives you a real trace to open — the step between "this is the problem" and "here is the
+    request where it happened".
+    """
+    win = resolve(period)
+    spans = Span.objects.filter(
+        transaction__project_id=project_id,
+        timestamp__gte=win.since,
+        op=op,
+        description=description,
+    )
+
+    totals = spans.aggregate(
+        count=Count("id"),
+        transactions=Count("transaction_id", distinct=True),
+        total_ms=Sum("duration_ms"),
+        p50=Percentile("duration_ms", 0.5),
+        p95=Percentile("duration_ms", 0.95),
+        p99=Percentile("duration_ms", 0.99),
+        slowest=Max("duration_ms"),
+    )
+    if not totals["count"]:
+        return None
+
+    callers = (
+        spans.values("transaction__name")
+        .annotate(count=Count("id"), total_ms=Sum("duration_ms"))
+        .order_by(F("total_ms").desc())[:10]
+    )
+
+    # Slowest first. A sample list sorted by time shows what happened last; sorted by duration
+    # it shows the one worth opening.
+    samples = (
+        spans.select_related("transaction")
+        .order_by("-duration_ms")[:10]
+        .values(
+            "duration_ms",
+            "transaction__id",
+            "transaction__name",
+            "transaction__duration_ms",
+            "transaction__timestamp",
+            "transaction__trace_id",
+        )
+    )
+
+    return {
+        "op": op,
+        "description": description,
+        "period": win.period,
+        "summary": {
+            "count": totals["count"],
+            "transactions": totals["transactions"],
+            "per_transaction": round(totals["count"] / totals["transactions"], 1),
+            "total_ms": round(totals["total_ms"] or 0, 1),
+            "p50": round(totals["p50"] or 0, 1),
+            "p95": round(totals["p95"] or 0, 1),
+            "p99": round(totals["p99"] or 0, 1),
+            "slowest": round(totals["slowest"] or 0, 1),
+        },
+        "distribution": _duration_histogram(spans, totals["slowest"] or 0),
+        "callers": [
+            {
+                "transaction": row["transaction__name"],
+                "count": row["count"],
+                "total_ms": round(row["total_ms"] or 0, 1),
+            }
+            for row in callers
+        ],
+        "samples": [
+            {
+                "duration_ms": round(row["duration_ms"], 1),
+                "trace_id": row["transaction__trace_id"],
+                "transaction_id": str(row["transaction__id"]),
+                "transaction": row["transaction__name"],
+                "transaction_ms": round(row["transaction__duration_ms"], 1),
+                "timestamp": row["transaction__timestamp"],
+            }
+            for row in samples
+        ],
+    }
+
+
+DISTRIBUTION_BUCKETS = 20
+
+
+def _duration_histogram(spans: QuerySet[Span], slowest: float) -> list[dict[str, Any]]:
+    """How the durations are actually spread.
+
+    A p50 and a p95 describe two points. The shape between them is what says whether this is
+    one slow tail or two different behaviours wearing the same statement — and those need
+    different fixes.
+    """
+    if slowest <= 0:
+        return []
+
+    width = slowest / DISTRIBUTION_BUCKETS
+    # Bucketed in SQL: pulling every duration into Python to histogram it is the scan the
+    # database exists to do.
+    rows = (
+        spans.annotate(
+            bucket=Least(
+                Floor(F("duration_ms") / Value(width)),
+                Value(float(DISTRIBUTION_BUCKETS - 1)),
+            )
+        )
+        .values("bucket")
+        .annotate(count=Count("id"))
+    )
+    counts = {int(row["bucket"]): row["count"] for row in rows if row["bucket"] is not None}
+
+    return [
+        {
+            "from_ms": round(index * width, 1),
+            "to_ms": round((index + 1) * width, 1),
+            "count": counts.get(index, 0),
+        }
+        for index in range(DISTRIBUTION_BUCKETS)
+    ]

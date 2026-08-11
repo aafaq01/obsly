@@ -13,6 +13,7 @@ import { Performance } from './pages/Performance'
 import { ProjectSettings } from './pages/ProjectSettings'
 import { Projects } from './pages/Projects'
 import { Queries } from './pages/Queries'
+import { SpanDetail } from './pages/SpanDetail'
 import { TraceDetail } from './pages/TraceDetail'
 import { Traces } from './pages/Traces'
 
@@ -82,6 +83,7 @@ export function App() {
               <Route path="performance" element={<Performance />} />
               <Route path="traces" element={<Traces />} />
               <Route path="spans" element={<Queries />} />
+              <Route path="span" element={<SpanDetail />} />
               <Route path="logs" element={<Logs />} />
               <Route path="settings" element={<ProjectSettings />} />
 

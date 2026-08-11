@@ -408,3 +408,87 @@ class TestSpanOps:
         ops = json_body(staff_client.get(reverse("api:spans", args=[project.pk]), secure=True))
 
         assert ops["ops"] == ["cache.get", "db.query"]
+
+
+class TestSpanDetail:
+    def url(self, project: Project) -> str:
+        return reverse("api:span-detail", args=[project.pk])
+
+    def setup_spans(self, project: Project) -> None:
+        insights = TestSpanInsights()
+        insights.make_span(project, "/a", "db.query", "SELECT 1", [5.0, 6.0, 40.0])
+        insights.make_span(project, "/b", "db.query", "SELECT 1", [7.0])
+        insights.make_span(project, "/a", "db.query", "SELECT 2", [9.0])
+
+    def test_summarises_one_span_group(self, staff_client: Client, project: Project) -> None:
+        self.setup_spans(project)
+
+        payload = json_body(
+            staff_client.get(f"{self.url(project)}?op=db.query&description=SELECT 1", secure=True)
+        )
+
+        assert payload["summary"]["count"] == 4
+        assert payload["summary"]["transactions"] == 2
+        assert payload["summary"]["slowest"] == pytest.approx(40, abs=1)
+
+    def test_names_the_endpoints_that_call_it(self, staff_client: Client, project: Project) -> None:
+        """The aggregate says a query is expensive; this says who makes it expensive."""
+        self.setup_spans(project)
+
+        payload = json_body(
+            staff_client.get(f"{self.url(project)}?op=db.query&description=SELECT 1", secure=True)
+        )
+
+        callers = {row["transaction"]: row["count"] for row in payload["callers"]}
+        assert callers == {"/a": 3, "/b": 1}
+
+    def test_offers_traces_to_open_slowest_first(
+        self, staff_client: Client, project: Project
+    ) -> None:
+        """A sample list sorted by time shows what happened last; sorted by duration it shows
+        the one worth opening."""
+        self.setup_spans(project)
+
+        payload = json_body(
+            staff_client.get(f"{self.url(project)}?op=db.query&description=SELECT 1", secure=True)
+        )
+
+        assert payload["samples"][0]["duration_ms"] == pytest.approx(40, abs=1)
+        assert payload["samples"][0]["transaction_id"]
+
+    def test_the_distribution_shows_the_shape_not_two_points(
+        self, staff_client: Client, project: Project
+    ) -> None:
+        """A p50 and a p95 describe two points. The shape between them says whether this is one
+        slow tail or two behaviours wearing the same statement."""
+        self.setup_spans(project)
+
+        payload = json_body(
+            staff_client.get(f"{self.url(project)}?op=db.query&description=SELECT 1", secure=True)
+        )
+
+        distribution = payload["distribution"]
+        assert len(distribution) == 20
+        assert sum(bucket["count"] for bucket in distribution) == 4
+
+        # Buckets are slowest/20 wide, so with a 40ms outlier each is 2ms: the three fast calls
+        # (5, 6, 7ms) land low but not in bucket zero, and the outlier lands in the last one.
+        # That separation is the point — it is what says "one slow tail", not "uniformly slow".
+        assert sum(bucket["count"] for bucket in distribution[:5]) == 3
+        assert distribution[-1]["count"] == 1
+
+    def test_a_span_with_no_data_in_the_window_is_not_a_500(
+        self, staff_client: Client, project: Project
+    ) -> None:
+        response = staff_client.get(
+            f"{self.url(project)}?op=db.query&description=never%20ran", secure=True
+        )
+
+        assert response.status_code == 404
+        assert "period" in json_body(response)["detail"].lower()
+
+    def test_op_is_required(self, staff_client: Client, project: Project) -> None:
+        assert staff_client.get(self.url(project), secure=True).status_code == 400
+
+    def test_requires_authentication(self, client: Client, project: Project) -> None:
+        assert client.get(f"{self.url(project)}?op=db.query", secure=True).status_code == 403

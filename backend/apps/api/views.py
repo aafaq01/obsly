@@ -19,7 +19,13 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.api.dashboard import overview
-from apps.api.performance import endpoint_summary, span_ops, span_summary, window
+from apps.api.performance import (
+    endpoint_summary,
+    span_detail,
+    span_ops,
+    span_summary,
+    window,
+)
 from apps.api.serializers import (
     CorrelatedErrorSerializer,
     EventSerializer,
@@ -187,6 +193,39 @@ class SpanInsightsView(APIView):
                 "spans": span_summary(project_id, period, op=op),
             }
         )
+
+
+class SpanDetailView(APIView):
+    """One span group: distribution, callers, and traces to open.
+
+    The aggregate says a query is expensive. This says which endpoints make it expensive and
+    hands over a real trace — the step between "this is the problem" and "here is the request
+    where it happened".
+    """
+
+    def get(self, request: Request, project_id: int) -> Response:
+        get_object_or_404(Project, pk=project_id)
+
+        op = request.query_params.get("op", "").strip()
+        description = request.query_params.get("description", "")
+        if not op:
+            return Response({"detail": "op is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        detail = span_detail(
+            project_id,
+            request.query_params.get("period", "24h"),
+            op=op,
+            description=description,
+        )
+        if detail is None:
+            # Nothing in the window rather than nothing ever: a 404 would read as "this span
+            # does not exist", which is a different and more alarming statement.
+            return Response(
+                {"detail": "No spans matched in this period.", "op": op},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        return Response(detail)
 
 
 class LogListView(generics.ListAPIView[LogRecord]):

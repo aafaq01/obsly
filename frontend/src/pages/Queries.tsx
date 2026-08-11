@@ -107,12 +107,21 @@ export function Queries() {
             </thead>
             <tbody>
               {rows.map((row) => (
-                <tr key={`${row.op}:${row.description}`}>
+                <tr key={`${row.op}:${row.description}`} className="perf__row">
                   <td>
-                    <span className="perf__name">{row.description || '(no description)'}</span>
-                    <span className="perf__op">{row.op}</span>
+                    <Link
+                      className="perf__link"
+                      to={
+                        `/projects/${id}/span?period=${period}` +
+                        `&op=${encodeURIComponent(row.op)}` +
+                        `&description=${encodeURIComponent(row.description)}`
+                      }
+                    >
+                      <span className="perf__name">{row.description || '(no description)'}</span>
+                      <span className="perf__op">{row.op}</span>
+                    </Link>
                   </td>
-                  <Magnitude value={row.count} max={maxCalls}>
+                  <Magnitude value={row.count} max={maxCalls} lead={sort === 'count'}>
                     {row.count.toLocaleString()}
                   </Magnitude>
                   {/* Above ~5 for a db.query this is the signature of an N+1: the same
@@ -126,10 +135,10 @@ export function Queries() {
                     )}
                   </td>
                   <td className="num">{formatMs(row.p50)}</td>
-                  <Magnitude value={row.p95} max={maxP95} className="strong">
+                  <Magnitude value={row.p95} max={maxP95} className="strong" lead={sort === 'p95'}>
                     {formatMs(row.p95)}
                   </Magnitude>
-                  <Magnitude value={row.total_ms} max={maxTotal}>
+                  <Magnitude value={row.total_ms} max={maxTotal} lead={sort === 'total_ms'}>
                     {formatMs(row.total_ms)}
                   </Magnitude>
                 </tr>

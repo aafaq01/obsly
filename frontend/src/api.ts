@@ -64,6 +64,32 @@ export interface SpanStats {
   p95: number
 }
 
+export interface SpanDetail {
+  op: string
+  description: string
+  period: string
+  summary: {
+    count: number
+    transactions: number
+    per_transaction: number
+    total_ms: number
+    p50: number
+    p95: number
+    p99: number
+    slowest: number
+  }
+  distribution: { from_ms: number; to_ms: number; count: number }[]
+  callers: { transaction: string; count: number; total_ms: number }[]
+  samples: {
+    duration_ms: number
+    trace_id: string
+    transaction_id: string
+    transaction: string
+    transaction_ms: number
+    timestamp: string
+  }[]
+}
+
 export interface SpanInsights {
   period: string
   ops: string[]
@@ -330,6 +356,11 @@ export const api = {
     get<LogRecord[]>(`/projects/${projectId}/logs/?${params.toString()}`),
   dashboard: (projectId: number, period: string) =>
     get<Dashboard>(`/projects/${projectId}/dashboard/?period=${period}`),
+  spanDetail: (projectId: number, period: string, op: string, description: string) =>
+    get<SpanDetail>(
+      `/projects/${projectId}/span/?period=${period}&op=${encodeURIComponent(op)}` +
+        `&description=${encodeURIComponent(description)}`,
+    ),
   spans: (projectId: number, period: string, op: string) =>
     get<SpanInsights>(`/projects/${projectId}/spans/?period=${period}&op=${op}`),
   performance: (projectId: number, period: string) =>

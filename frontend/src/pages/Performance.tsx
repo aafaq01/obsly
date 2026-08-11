@@ -116,19 +116,28 @@ export function Performance() {
                       <span className="perf__name">{row.name}</span>
                       <span className="perf__op">{row.op}</span>
                     </td>
-                    <Magnitude value={row.throughput_per_minute} max={maxTpm}>
+                    <Magnitude
+                      value={row.throughput_per_minute}
+                      max={maxTpm}
+                      lead={sort === 'count'}
+                    >
                       {row.throughput_per_minute.toFixed(2)}
                     </Magnitude>
                     <td className="num">{ms(row.p50)}</td>
                     <td className="num">{ms(row.p75)}</td>
-                    <Magnitude value={row.p95} max={maxP95} className="strong">
+                    <Magnitude
+                      value={row.p95}
+                      max={maxP95}
+                      className="strong"
+                      lead={sort === 'p95'}
+                    >
                       {ms(row.p95)}
                     </Magnitude>
                     <td className="num">{ms(row.p99)}</td>
                     <td className={`num ${row.failure_rate > 0 ? 'bad' : ''}`}>
                       {percent(row.failure_rate)}
                     </td>
-                    <Magnitude value={row.total_ms} max={maxTotal}>
+                    <Magnitude value={row.total_ms} max={maxTotal} lead={sort === 'total_ms'}>
                       {seconds(row.total_ms)}
                     </Magnitude>
                   </tr>

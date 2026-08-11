@@ -29,7 +29,7 @@
 
   /* Magnitude fill behind a measured value. Low alpha on purpose: it has to read as a
      background quantity, never as a highlight competing with the digits in front of it. */
-  --magnitude: color-mix(in srgb, var(--series-1) 16%, transparent);
+  --magnitude: color-mix(in srgb, var(--ink) 22%, transparent);
 
   /* Data is monospace because that is what the subject is made of — durations, ids, statements,
      stack frames. Sans is for prose only. */
@@ -63,7 +63,7 @@
     --baseline: #383835;
     --border: rgba(255, 255, 255, 0.1);
     --series-1: #3987e5;
-    --magnitude: color-mix(in srgb, var(--series-1) 22%, transparent);
+    --magnitude: color-mix(in srgb, var(--ink) 28%, transparent);
   }
 }
 
@@ -78,7 +78,7 @@
   --baseline: #383835;
   --border: rgba(255, 255, 255, 0.1);
   --series-1: #3987e5;
-  --magnitude: color-mix(in srgb, var(--series-1) 22%, transparent);
+  --magnitude: color-mix(in srgb, var(--ink) 28%, transparent);
 }
 
 * {
@@ -119,25 +119,36 @@ a {
 
 /* --- the signature: magnitude in the cell ---------------------------------- */
 
-/* A measured value carries a bar of its own size behind it, so a column of numbers reads as a
-   chart without being one. Scanning "which row is the problem" stops needing a second chart
-   beside the table.
+/* A measured value carries a rule of its own size beneath it, so a column of numbers reads as
+   a small bar chart.
+
+   First attempt filled the whole cell behind the number. It read as a highlight rather than a
+   quantity — cells looked arbitrarily selected, and the first question anybody asked was "what
+   are these?". A mark that has to be explained is not carrying information, so this is now a
+   3px rule on the baseline: unmistakably a bar, quiet enough that the digits stay the subject.
 
    The width is set inline from the data, because it is data — not styling. */
 .mag {
   position: relative;
-  isolation: isolate;
 }
 
-.mag::before {
+.mag::after {
   content: '';
   position: absolute;
-  inset: 2px 0 2px auto;
-  right: 0;
-  width: var(--mag, 0%);
+  right: var(--s4);
+  bottom: 5px;
+  height: 3px;
+  width: calc(var(--mag, 0%) * 0.62);
+  max-width: calc(100% - var(--s8));
   background: var(--magnitude);
   border-radius: 2px;
-  z-index: -1;
+}
+
+/* Only the ranking column gets the strong tint; the rest stay a hairline, so one column leads
+   the eye rather than six competing. */
+.mag--lead::after {
+  background: var(--series-1);
+  opacity: 0.55;
 }
 
 /* --- layout ------------------------------------------------------------- */
@@ -1668,4 +1679,51 @@ a.mini-row:hover {
     animation: none;
     background: color-mix(in srgb, var(--ink) 4%, transparent);
   }
+}
+
+/* --- span detail ----------------------------------------------------------- */
+
+/* A statement is the subject of this page, so it is set in the data face rather than the
+   prose one. */
+.mono-title {
+  font-family: var(--mono);
+  font-size: 15px;
+  line-height: 1.45;
+  letter-spacing: 0;
+}
+
+.perf__link {
+  display: block;
+  color: inherit;
+}
+
+.perf__row:hover .perf__name {
+  color: var(--series-1);
+}
+
+/* A distribution, not a time series: the x-axis is duration, so the bars sit against a scale
+   of milliseconds rather than of clock time. */
+.dist {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 96px;
+}
+
+.dist__slot {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+}
+
+.dist__bar {
+  width: 100%;
+  background: var(--series-1);
+  border-radius: 2px 2px 0 0;
+  min-height: 1px;
+}
+
+.dist__slot:hover .dist__bar {
+  filter: brightness(1.3);
 }
