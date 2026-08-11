@@ -9,7 +9,7 @@ import { relativeTime } from '../time'
 
 export function Issues() {
   const { projectId } = useParams()
-  const [projects, setProjects] = useState<Project[]>([])
+  const [project, setProject] = useState<Project | null>(null)
   const [issues, setIssues] = useState<Issue[] | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -17,15 +17,13 @@ export function Issues() {
   const [status, setStatus] = useState('unresolved')
   const [sort, setSort] = useState('last_seen')
 
-  useEffect(() => {
-    api.projects().then(setProjects).catch(handle(setError))
-  }, [])
-
-  const active = projectId ? Number(projectId) : projects[0]?.id
+  const active = Number(projectId)
 
   useEffect(() => {
-    if (active === undefined) return
+    api.project(active).then(setProject).catch(handle(setError))
+  }, [active])
 
+  useEffect(() => {
     const params = new URLSearchParams({ status, sort })
     if (query) params.set('q', query)
 
@@ -40,25 +38,11 @@ export function Issues() {
 
   if (error) return <Notice>{error}</Notice>
 
-  const project = projects.find((p) => p.id === active)
-
   return (
     <>
-      <h1 className="page-title">{project ? project.name : 'Issues'}</h1>
+      <h1 className="page-title">Issues</h1>
       <p className="page-subtitle">
-        {project ? `${project.organization} · ${project.platform}` : 'Loading projects…'}
-        {project && (
-          <>
-            {' · '}
-            <Link to={`/projects/${project.id}/performance`} style={{ color: 'var(--series-1)' }}>
-              Performance
-            </Link>
-            {' · '}
-            <Link to={`/projects/${project.id}/settings`} style={{ color: 'var(--series-1)' }}>
-              Settings
-            </Link>
-          </>
-        )}
+        {project ? `${project.organization} · ${project.platform}` : 'Loading…'}
       </p>
 
       <div className="filters">
@@ -80,21 +64,6 @@ export function Issues() {
           <option value="first_seen">First seen</option>
           <option value="times_seen">Events</option>
         </select>
-        {projects.length > 1 && (
-          <select
-            value={active ?? ''}
-            onChange={(e) => {
-              window.location.href = `/projects/${e.target.value}/issues`
-            }}
-            aria-label="Project"
-          >
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name} ({p.unresolved_count})
-              </option>
-            ))}
-          </select>
-        )}
       </div>
 
       {issues === null ? (

@@ -59,7 +59,7 @@ const ISSUE = {
 
 function renderApp() {
   return render(
-    <MemoryRouter initialEntries={['/']}>
+    <MemoryRouter initialEntries={['/projects/1/issues']}>
       <App />
     </MemoryRouter>,
   )
@@ -874,5 +874,107 @@ describe('Logs', () => {
 
     expect(await screen.findByText(/No logs yet/)).toBeInTheDocument()
     expect(screen.getByText(/enable_logs=True/)).toBeInTheDocument()
+  })
+})
+
+describe('Navigation', () => {
+  it('lands on the project list, not on whichever project sorts first', async () => {
+    // Landing on an arbitrary project reads as a bug the moment you have more than one.
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/': { body: [PROJECT, { ...PROJECT, id: 2, name: 'Billing' }] },
+      '/organizations/': { body: [] },
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByRole('heading', { name: 'Projects' })).toBeInTheDocument()
+  })
+
+  it('shows every project tab once inside a project', async () => {
+    // These rendered nothing before: the tab bar sat outside <Routes>, so useParams returned
+    // an empty object and every page it linked to was unreachable.
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/1/': { body: { ...PROJECT, keys: [] } },
+      '/projects/1/issues/': { body: [] },
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/projects/1/issues']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    for (const tab of [
+      'Overview',
+      'Issues',
+      'Performance',
+      'Traces',
+      'Spans',
+      'Logs',
+      'Settings',
+    ]) {
+      expect(await screen.findByRole('link', { name: tab })).toBeInTheDocument()
+    }
+  })
+
+  it('names the project in the tab bar', async () => {
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/1/': { body: { ...PROJECT, keys: [] } },
+      '/projects/1/issues/': { body: [] },
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/projects/1/issues']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('Checkout')).toBeInTheDocument()
+  })
+
+  it('a bare project url opens the overview', async () => {
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/1/': { body: { ...PROJECT, keys: [] } },
+      '/projects/1/dashboard/': {
+        body: {
+          period: '24h',
+          buckets: 24,
+          headline: {
+            transactions: 5,
+            throughput_per_minute: 0.1,
+            failure_rate: 0,
+            p95_ms: 12,
+            errors: 0,
+            unresolved_issues: 0,
+            logs: 0,
+          },
+          series: {
+            throughput: [5],
+            failures: [0],
+            errors: [0],
+            logs: [0],
+            p95: [12],
+          },
+          top_issues: [],
+          slowest_endpoints: [],
+        },
+      },
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/projects/1']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByRole('heading', { name: 'Overview' })).toBeInTheDocument()
   })
 })
