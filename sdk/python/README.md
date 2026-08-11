@@ -97,3 +97,24 @@ usually lives.
 Records are batched and flushed on size, on age, and by a background thread. The thread matters:
 the age check only runs when something is added, so without it the last lines of a burst sit
 stranded until the application happens to log again.
+
+## Automatic database spans
+
+```python
+import obsly
+
+obsly.init(dsn="...", traces_sample_rate=0.1)
+obsly.integrations.sqlalchemy.instrument()
+```
+
+Every query the application runs now appears inside the trace of the request that ran it, with
+no `start_span()` calls anywhere in the application. That distinction is the point: manual
+instrumentation only ever covers the code somebody remembered to annotate, and the queries
+nobody remembered are exactly the ones that turn out to be the problem.
+
+The statement is recorded as SQLAlchemy hands it over, with bind parameters still as
+placeholders. **Parameter values are never captured** — they are the row itself, which is where
+the personal data lives.
+
+Returns `False` if SQLAlchemy is not installed rather than raising: an optional integration that
+breaks startup by being unavailable is worse than one that is simply absent.

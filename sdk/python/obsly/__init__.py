@@ -18,6 +18,7 @@ from obsly.client import (
     logger,
     start_transaction,
 )
+from obsly.integrations import sqlalchemy as sqlalchemy_integration
 from obsly.logs import ObslyLogHandler
 from obsly.tracing import get_current_span, start_span
 
@@ -34,6 +35,7 @@ __all__ = [
     "get_current_span",
     "init",
     "logger",
+    "sqlalchemy_integration",
     "start_span",
     "start_transaction",
 ]

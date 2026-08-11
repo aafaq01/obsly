@@ -53,6 +53,10 @@ class Span:
     end: float | None = None
     sampled: bool = True
 
+    # Set by begin_span so end_span can restore the previous context. Unused by the context
+    # manager, which holds its own token on the stack.
+    _token: Any = None
+
     # Only the root holds the list; a nested span appends to its transaction rather than
     # carrying children, so serialising is a flat walk instead of a recursive one.
     transaction: "Transaction | None" = None
@@ -148,6 +152,45 @@ def _is_hex(value: str) -> bool:
 
 def trace_header(span: Span) -> str:
     return f"{span.trace_id}-{span.span_id}-{'1' if span.sampled else '0'}"
+
+
+def begin_span(op: str, description: str = "", **data: Any) -> Span | None:
+    """Open a span without a `with` block.
+
+    Instrumentation that hooks a library's before/after callbacks cannot hold a context
+    manager open across them, so it needs the two halves separately. Returns None when there
+    is nothing to attach to, and callers must treat that as "do nothing" rather than an error.
+    """
+    parent = _current_span.get()
+    if parent is None or parent.transaction is None or not parent.sampled:
+        return None
+
+    span = Span(
+        op=op,
+        description=description,
+        trace_id=parent.trace_id,
+        parent_span_id=parent.span_id,
+        data=data,
+        sampled=parent.sampled,
+        transaction=parent.transaction,
+    )
+    span._token = _current_span.set(span)
+    return span
+
+
+def end_span(span: Span | None, status: str | None = None) -> None:
+    """Close a span opened with begin_span. Safe to call with None."""
+    if span is None:
+        return
+
+    span.finish(status)
+    token = getattr(span, "_token", None)
+    if token is not None:
+        _current_span.reset(token)
+        span._token = None
+
+    if span.transaction is not None:
+        span.transaction.add(span)
 
 
 @contextmanager
