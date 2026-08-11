@@ -4,9 +4,9 @@ import { useParams } from 'react-router-dom'
 import { api, type Performance as PerformanceData } from '../api'
 import { EventChart } from '../components/EventChart'
 import { Notice } from '../components/Notice'
+import { PeriodPicker } from '../components/PeriodPicker'
 import { handle } from '../errors'
-
-const PERIODS = ['1h', '24h', '7d', '30d']
+import { bucketLabel } from '../format'
 
 type SortKey = 'total_ms' | 'p95' | 'count' | 'failure_rate'
 
@@ -50,13 +50,7 @@ export function Performance() {
       </p>
 
       <div className="filters">
-        <select value={period} onChange={(e) => setPeriod(e.target.value)} aria-label="Period">
-          {PERIODS.map((option) => (
-            <option key={option} value={option}>
-              Last {option}
-            </option>
-          ))}
-        </select>
+        <PeriodPicker value={period} onChange={setPeriod} />
         <select
           value={sort}
           onChange={(e) => setSort(e.target.value as SortKey)}
@@ -77,9 +71,11 @@ export function Performance() {
 
       {data.summary.transactions > 0 && (
         <div className="section">
-          <h2 className="section__title">Throughput per hour</h2>
+          <h2 className="section__title">
+            Throughput per {bucketLabel(data.summary.bucket_seconds)}
+          </h2>
           <div className="card" style={{ padding: 16 }}>
-            <EventChart hourly={data.summary.hourly} />
+            <EventChart hourly={data.summary.series} bucketSeconds={data.summary.bucket_seconds} />
           </div>
         </div>
       )}

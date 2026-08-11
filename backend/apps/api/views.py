@@ -7,11 +7,10 @@ to secure it later.
 """
 
 from collections import defaultdict
-from datetime import UTC, datetime, timedelta
+from datetime import datetime
 from typing import Any
 
 from django.db.models import Count, Q, QuerySet
-from django.db.models.functions import TruncHour
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import generics, status
@@ -34,13 +33,12 @@ from apps.api.serializers import (
     TraceDetailSerializer,
     TransactionSerializer,
 )
+from apps.api.timewindow import PERIODS, Window, resolve
 from apps.events.models import Event
 from apps.issues.models import Issue, IssueStatus
 from apps.logs.models import LogRecord
 from apps.projects.models import Organization, Project, ProjectKey
 from apps.tracing.models import SpanStatus, Transaction
-
-HOURS = 24
 
 SORTS = {
     "last_seen": "-last_seen",
@@ -116,15 +114,16 @@ class PerformanceView(APIView):
 
     def get(self, request: Request, project_id: int) -> Response:
         get_object_or_404(Project, pk=project_id)
-        period = request.query_params.get("period", "24h")
-        since, minutes = window(period)
+        win = resolve(request.query_params.get("period"))
+        period, minutes = win.period, win.minutes
 
         endpoints = endpoint_summary(project_id, period)
-        totals = Transaction.objects.filter(project_id=project_id, timestamp__gte=since)
+        totals = Transaction.objects.filter(project_id=project_id, timestamp__gte=win.since)
 
         return Response(
             {
                 "period": period,
+                "periods": list(PERIODS),
                 "endpoints": endpoints,
                 "summary": {
                     "transactions": sum(row["count"] for row in endpoints),
@@ -132,7 +131,8 @@ class PerformanceView(APIView):
                         sum(row["count"] for row in endpoints) / minutes, 3
                     ),
                     "failure_rate": _overall_failure_rate(endpoints),
-                    "hourly": _hourly_throughput(totals, since),
+                    "series": _throughput(totals, win),
+                    "bucket_seconds": win.bucket_seconds,
                 },
             }
         )
@@ -146,14 +146,10 @@ def _overall_failure_rate(endpoints: list[dict[str, Any]]) -> float:
     return float(round(failures / total, 4))
 
 
-def _hourly_throughput(queryset: QuerySet[Transaction], since: datetime) -> list[int]:
-    """Zero-filled buckets, so a quiet hour is a gap in the chart rather than a missing bar."""
-    rows = queryset.annotate(hour=TruncHour("timestamp")).values("hour").annotate(count=Count("id"))
-    counts = {row["hour"]: row["count"] for row in rows}
-
-    start = since.replace(minute=0, second=0, microsecond=0)
-    buckets = int((datetime.now(tz=UTC) - start).total_seconds() // 3600) + 1
-    return [counts.get(start + timedelta(hours=offset), 0) for offset in range(max(buckets, 1))]
+def _throughput(queryset: QuerySet[Transaction], win: Window) -> list[int]:
+    """Zero-filled buckets, so a quiet period is a gap in the chart rather than a missing bar."""
+    rows = queryset.annotate(bucket=win.truncate()).values("bucket").annotate(count=Count("id"))
+    return win.zero_filled({row["bucket"]: row["count"] for row in rows})
 
 
 class DashboardView(APIView):
@@ -183,6 +179,7 @@ class SpanInsightsView(APIView):
         return Response(
             {
                 "period": period,
+                "periods": list(PERIODS),
                 "ops": span_ops(project_id, period),
                 "spans": span_summary(project_id, period, op=op),
             }
@@ -309,7 +306,8 @@ class IssueListView(generics.ListAPIView[Issue]):
 
     def list(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         issues = list(self.get_queryset())
-        histograms = _hourly_histograms([issue.pk for issue in issues])
+        win = resolve(self.request.query_params.get("period"))
+        histograms = _histograms([issue.pk for issue in issues], win)
 
         for issue in issues:
             issue.hourly = histograms[issue.pk]  # type: ignore[attr-defined]
@@ -323,7 +321,8 @@ class IssueDetailView(generics.RetrieveAPIView[Issue]):
 
     def retrieve(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         issue = self.get_object()
-        issue.hourly = _hourly_histograms([issue.pk])[issue.pk]  # type: ignore[attr-defined]
+        win = resolve(request.query_params.get("period"))
+        issue.hourly = _histograms([issue.pk], win)[issue.pk]  # type: ignore[attr-defined]
 
         latest = Event.objects.filter(issue=issue).order_by("-timestamp").first()
 
@@ -382,8 +381,8 @@ class IssueEventsView(generics.ListAPIView[Event]):
         return Event.objects.filter(issue_id=self.kwargs["issue_id"]).order_by("-timestamp")[:50]
 
 
-def _hourly_histograms(issue_ids: list[int]) -> dict[int, list[int]]:
-    """Events per hour for the last 24h, one bucket per hour, zero-filled.
+def _histograms(issue_ids: list[int], win: Window) -> dict[int, list[int]]:
+    """Events per bucket over the window, zero-filled.
 
     One grouped query for every issue on the page rather than one per row — the stream shows a
     hundred issues, and a hundred round trips is how a list view becomes a page-load problem.
@@ -391,25 +390,18 @@ def _hourly_histograms(issue_ids: list[int]) -> dict[int, list[int]]:
     if not issue_ids:
         return {}
 
-    since = datetime.now(tz=UTC).replace(minute=0, second=0, microsecond=0) - timedelta(
-        hours=HOURS - 1
-    )
-
     rows = (
-        Event.objects.filter(issue_id__in=issue_ids, timestamp__gte=since)
-        .annotate(hour=TruncHour("timestamp"))
-        .values("issue_id", "hour")
+        Event.objects.filter(issue_id__in=issue_ids, timestamp__gte=win.since)
+        .annotate(bucket=win.truncate())
+        .values("issue_id", "bucket")
         .annotate(count=Count("id"))
     )
 
     counts: dict[int, dict[datetime, int]] = defaultdict(dict)
     for row in rows:
-        counts[row["issue_id"]][row["hour"]] = row["count"]
+        counts[row["issue_id"]][row["bucket"]] = row["count"]
 
-    buckets = [since + timedelta(hours=offset) for offset in range(HOURS)]
-    return {
-        issue_id: [counts[issue_id].get(bucket, 0) for bucket in buckets] for issue_id in issue_ids
-    }
+    return {issue_id: win.zero_filled(counts[issue_id]) for issue_id in issue_ids}
 
 
 def _tag_distribution(issue: Issue, limit: int = 5) -> dict[str, list[dict[str, Any]]]:

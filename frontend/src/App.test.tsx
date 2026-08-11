@@ -472,7 +472,8 @@ describe('Performance page', () => {
       transactions: 1540,
       throughput_per_minute: 1.07,
       failure_rate: 0.047,
-      hourly: Array<number>(24).fill(64),
+      series: Array<number>(24).fill(64),
+      bucket_seconds: 3600,
     },
   }
 

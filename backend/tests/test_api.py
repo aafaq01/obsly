@@ -66,7 +66,7 @@ class TestIssueList:
         assert issue["times_seen"] == 3
         assert issue["culprit"] == "app.crud in get_cart"
 
-    def test_hourly_histogram_has_one_bucket_per_hour(
+    def test_histogram_has_one_bucket_per_hour(
         self, staff_client: Client, project: Project, project_key: ProjectKey
     ) -> None:
         """The stream renders a chart per row; a ragged array would misalign every one of them."""
@@ -74,7 +74,9 @@ class TestIssueList:
 
         [issue] = json_body(staff_client.get(self.url(project), secure=True))
 
-        assert len(issue["hourly"]) == 24
+        # 25, not 24: the window runs from the floor of 24h-ago to now, so the partial
+        # current hour gets its own bucket rather than being dropped.
+        assert len(issue["hourly"]) == 25
         assert sum(issue["hourly"]) == 1
 
     def test_events_older_than_the_window_are_not_counted_in_the_histogram(

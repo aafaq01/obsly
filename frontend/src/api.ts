@@ -73,6 +73,7 @@ export interface SpanInsights {
 export interface Dashboard {
   period: string
   buckets: number
+  bucket_seconds: number
   headline: {
     transactions: number
     throughput_per_minute: number
@@ -120,7 +121,8 @@ export interface Performance {
     transactions: number
     throughput_per_minute: number
     failure_rate: number
-    hourly: number[]
+    series: number[]
+    bucket_seconds: number
   }
 }
 

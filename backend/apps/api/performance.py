@@ -5,14 +5,13 @@ requests in 20ms and 1% in 8 seconds averages out to something that looks health
 p99 says plainly that one request in a hundred is unusable.
 """
 
-from datetime import UTC, datetime, timedelta
+from datetime import datetime
 from typing import Any
 
 from django.db.models import Aggregate, Count, F, FloatField, Q, Sum
 
+from apps.api.timewindow import resolve
 from apps.tracing.models import Span, SpanStatus, Transaction
-
-PERIODS = {"1h": 1, "24h": 24, "7d": 24 * 7, "30d": 24 * 30}
 
 
 class Percentile(Aggregate):
@@ -32,9 +31,9 @@ class Percentile(Aggregate):
 
 
 def window(period: str) -> tuple[datetime, float]:
-    """Return (since, minutes). Unknown periods fall back to 24h rather than erroring."""
-    hours = PERIODS.get(period, 24)
-    return datetime.now(tz=UTC) - timedelta(hours=hours), hours * 60
+    """Kept as a two-tuple for the callers that only need the range."""
+    resolved = resolve(period)
+    return resolved.since, resolved.minutes
 
 
 def endpoint_summary(project_id: int, period: str, *, limit: int = 100) -> list[dict[str, Any]]:

@@ -1,12 +1,14 @@
 import { useState } from 'react'
 
+import { agoLabel, bucketLabel, humanSpan } from '../format'
+
 interface Props {
   /** One count per bucket, oldest first. */
   hourly: number[]
   /** Row-sized: bars only, no axis or readout. */
   compact?: boolean
   /** What one bucket covers, for the axis and the table view. */
-  bucketHours?: number
+  bucketSeconds?: number
   unit?: string
 }
 
@@ -21,19 +23,24 @@ interface Props {
  * because a tooltip that is the only route to a number is unreachable by keyboard and gone
  * the moment you look away.
  */
-export function EventChart({ hourly, compact = false, bucketHours = 1, unit = 'events' }: Props) {
+export function EventChart({
+  hourly,
+  compact = false,
+  bucketSeconds = 3600,
+  unit = 'events',
+}: Props) {
   const [hover, setHover] = useState<number | null>(null)
   const [showTable, setShowTable] = useState(false)
 
   const max = Math.max(...hourly, 1)
   const total = hourly.reduce((sum, value) => sum + value, 0)
-  const span = hourly.length * bucketHours
+  const spanSeconds = hourly.length * bucketSeconds
 
   const bars = (
     <div
       className={compact ? 'bars bars--compact' : 'bars'}
       role="img"
-      aria-label={`${unit} per ${bucketHours === 1 ? 'hour' : `${bucketHours} hours`} over the last ${span} hours, ${total} total`}
+      aria-label={`${unit} per ${bucketLabel(bucketSeconds)} over the last ${humanSpan(spanSeconds)}, ${total} total`}
     >
       {hourly.map((count, index) => (
         <div
@@ -62,13 +69,13 @@ export function EventChart({ hourly, compact = false, bucketHours = 1, unit = 'e
       <figcaption className="chart2__readout">
         {hover === null ? (
           <>
-            <strong>{total.toLocaleString()}</strong> {unit} · peak {max.toLocaleString()}/
-            {bucketHours === 1 ? 'hr' : `${bucketHours}hr`}
+            <strong>{total.toLocaleString()}</strong> {unit} · peak {max.toLocaleString()} per{' '}
+            {bucketLabel(bucketSeconds)}
           </>
         ) : (
           <>
             <strong>{hourly[hover]?.toLocaleString()}</strong> {unit} ·{' '}
-            {bucketLabel(hourly.length - 1 - hover, bucketHours)}
+            {agoLabel((hourly.length - 1 - hover) * bucketSeconds)}
           </>
         )}
       </figcaption>
@@ -79,8 +86,8 @@ export function EventChart({ hourly, compact = false, bucketHours = 1, unit = 'e
       </div>
 
       <div className="chart2__xaxis">
-        <span>{span}h ago</span>
-        <span>{Math.round(span / 2)}h ago</span>
+        <span>{humanSpan(spanSeconds)} ago</span>
+        <span>{humanSpan(Math.round(spanSeconds / 2))} ago</span>
         <span>now</span>
       </div>
 
@@ -103,7 +110,7 @@ export function EventChart({ hourly, compact = false, bucketHours = 1, unit = 'e
               .reverse()
               .map(({ count, index }) => (
                 <tr key={index}>
-                  <td>{bucketLabel(hourly.length - 1 - index, bucketHours)}</td>
+                  <td>{agoLabel((hourly.length - 1 - index) * bucketSeconds)}</td>
                   <td className="num">{count.toLocaleString()}</td>
                 </tr>
               ))}
@@ -112,11 +119,4 @@ export function EventChart({ hourly, compact = false, bucketHours = 1, unit = 'e
       )}
     </figure>
   )
-}
-
-function bucketLabel(bucketsAgo: number, bucketHours: number): string {
-  const hours = bucketsAgo * bucketHours
-  if (hours === 0) return 'this hour'
-  if (hours === 1) return '1 hour ago'
-  return `${hours} hours ago`
 }
