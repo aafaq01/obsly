@@ -6,7 +6,9 @@ import { IssueDetailPage } from './pages/IssueDetailPage'
 import { Notice } from './components/Notice'
 import { ProjectNav } from './components/ProjectNav'
 import { Issues } from './pages/Issues'
+import { Dashboard } from './pages/Dashboard'
 import { Login } from './pages/Login'
+import { Queries } from './pages/Queries'
 import { Logs } from './pages/Logs'
 import { Performance } from './pages/Performance'
 import { TraceDetail } from './pages/TraceDetail'
@@ -75,6 +77,8 @@ export function App() {
             <Route path="/projects/:projectId/performance" element={<Performance />} />
             <Route path="/projects/:projectId/traces" element={<Traces />} />
             <Route path="/projects/:projectId/logs" element={<Logs />} />
+            <Route path="/projects/:projectId/dashboard" element={<Dashboard />} />
+            <Route path="/projects/:projectId/spans" element={<Queries />} />
             <Route path="/traces/:traceId" element={<TraceDetail />} />
             <Route path="/projects/:projectId/settings" element={<ProjectSettings />} />
             <Route path="*" element={<Navigate to="/" replace />} />

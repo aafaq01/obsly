@@ -19,7 +19,8 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.api.performance import endpoint_summary, window
+from apps.api.dashboard import overview
+from apps.api.performance import endpoint_summary, span_ops, span_summary, window
 from apps.api.serializers import (
     CorrelatedErrorSerializer,
     EventSerializer,
@@ -153,6 +154,39 @@ def _hourly_throughput(queryset: QuerySet[Transaction], since: datetime) -> list
     start = since.replace(minute=0, second=0, microsecond=0)
     buckets = int((datetime.now(tz=UTC) - start).total_seconds() // 3600) + 1
     return [counts.get(start + timedelta(hours=offset), 0) for offset in range(max(buckets, 1))]
+
+
+class DashboardView(APIView):
+    """The project overview, in one request.
+
+    A dashboard that fires eight parallel calls renders in eight stages, and every stage is a
+    layout shift.
+    """
+
+    def get(self, request: Request, project_id: int) -> Response:
+        get_object_or_404(Project, pk=project_id)
+        return Response(overview(project_id, request.query_params.get("period", "24h")))
+
+
+class SpanInsightsView(APIView):
+    """Spans aggregated by what they do, not by which request they were in.
+
+    A waterfall shows one request. The span that matters is usually the one that is
+    individually fast and runs ten thousand times, and only an aggregate can show that.
+    """
+
+    def get(self, request: Request, project_id: int) -> Response:
+        get_object_or_404(Project, pk=project_id)
+        period = request.query_params.get("period", "24h")
+        op = request.query_params.get("op", "").strip()
+
+        return Response(
+            {
+                "period": period,
+                "ops": span_ops(project_id, period),
+                "spans": span_summary(project_id, period, op=op),
+            }
+        )
 
 
 class LogListView(generics.ListAPIView[LogRecord]):

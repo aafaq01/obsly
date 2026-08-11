@@ -13,9 +13,11 @@ export function ProjectNav() {
   return (
     <div className="subnav">
       <nav className="subnav__tabs">
+        <NavLink to={`/projects/${projectId}/dashboard`}>Overview</NavLink>
         <NavLink to={`/projects/${projectId}/issues`}>Issues</NavLink>
         <NavLink to={`/projects/${projectId}/performance`}>Performance</NavLink>
         <NavLink to={`/projects/${projectId}/traces`}>Traces</NavLink>
+        <NavLink to={`/projects/${projectId}/spans`}>Spans</NavLink>
         <NavLink to={`/projects/${projectId}/logs`}>Logs</NavLink>
         <NavLink to={`/projects/${projectId}/settings`}>Settings</NavLink>
       </nav>

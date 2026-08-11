@@ -39,6 +39,54 @@ export interface Issue {
   hourly: number[]
 }
 
+export interface SpanStats {
+  op: string
+  description: string
+  count: number
+  transactions: number
+  per_transaction: number
+  throughput_per_minute: number
+  total_ms: number
+  p50: number
+  p95: number
+}
+
+export interface SpanInsights {
+  period: string
+  ops: string[]
+  spans: SpanStats[]
+}
+
+export interface Dashboard {
+  period: string
+  buckets: number
+  headline: {
+    transactions: number
+    throughput_per_minute: number
+    failure_rate: number
+    p95_ms: number
+    errors: number
+    unresolved_issues: number
+    logs: number
+  }
+  series: {
+    throughput: number[]
+    failures: number[]
+    errors: number[]
+    logs: number[]
+    p95: number[]
+  }
+  top_issues: {
+    id: number
+    title: string
+    culprit: string
+    level: string
+    times_seen: number
+    last_seen: string
+  }[]
+  slowest_endpoints: { name: string; count: number; p95: number }[]
+}
+
 export interface EndpointStats {
   name: string
   op: string
@@ -265,6 +313,10 @@ export const api = {
   trace: (id: string) => get<TraceDetail>(`/traces/${id}/`),
   logs: (projectId: number, params: URLSearchParams) =>
     get<LogRecord[]>(`/projects/${projectId}/logs/?${params.toString()}`),
+  dashboard: (projectId: number, period: string) =>
+    get<Dashboard>(`/projects/${projectId}/dashboard/?period=${period}`),
+  spans: (projectId: number, period: string, op: string) =>
+    get<SpanInsights>(`/projects/${projectId}/spans/?period=${period}&op=${op}`),
   performance: (projectId: number, period: string) =>
     get<Performance>(`/projects/${projectId}/performance/?period=${period}`),
   issueEvents: (id: number) => get<ObslyEvent[]>(`/issues/${id}/events/`),
