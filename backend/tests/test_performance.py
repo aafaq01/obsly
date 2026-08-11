@@ -143,14 +143,34 @@ class TestPercentiles:
 
         assert payload["summary"]["transactions"] == 1
 
-    def test_hourly_buckets_are_zero_filled(self, staff_client: Client, project: Project) -> None:
-        """A quiet hour must be a gap in the chart, not a missing bar that shifts every other."""
+    def test_buckets_are_zero_filled(self, staff_client: Client, project: Project) -> None:
+        """A quiet bucket must be a gap in the chart, not a missing bar that shifts every other."""
         make(project, "/api", [10.0] * 3)
 
-        hourly = summary(staff_client, project)["summary"]["hourly"]
+        payload = summary(staff_client, project)["summary"]
 
-        assert len(hourly) >= 24
-        assert sum(hourly) == 3
+        assert len(payload["series"]) >= 24
+        assert sum(payload["series"]) == 3
+        assert payload["bucket_seconds"] == 3600
+
+    def test_a_short_window_buckets_by_minute(self, staff_client: Client, project: Project) -> None:
+        """An hour bucketed hourly is one bar, which says nothing."""
+        make(project, "/api", [10.0] * 3, minutes_ago=2)
+
+        payload = summary(staff_client, project, period="15m")["summary"]
+
+        assert payload["bucket_seconds"] == 60
+        assert len(payload["series"]) >= 15
+
+    def test_the_shortest_window_buckets_by_second(
+        self, staff_client: Client, project: Project
+    ) -> None:
+        make(project, "/api", [10.0], minutes_ago=0)
+
+        payload = summary(staff_client, project, period="1m")["summary"]
+
+        assert payload["bucket_seconds"] == 1
+        assert len(payload["series"]) >= 60
 
     def test_no_data_is_an_empty_answer_not_an_error(
         self, staff_client: Client, project: Project

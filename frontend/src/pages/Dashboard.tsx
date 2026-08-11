@@ -3,12 +3,11 @@ import { Link, useParams, useSearchParams } from 'react-router-dom'
 
 import { api, type Dashboard as Data } from '../api'
 import { Notice } from '../components/Notice'
+import { PeriodPicker } from '../components/PeriodPicker'
 import { Sparkline } from '../components/Sparkline'
 import { handle } from '../errors'
-import { formatMs } from '../format'
+import { bucketLabel, formatMs } from '../format'
 import { relativeTime } from '../time'
-
-const PERIODS = ['1h', '24h', '7d', '30d']
 
 export function Dashboard() {
   const { projectId } = useParams()
@@ -46,21 +45,14 @@ export function Dashboard() {
       {/* One filter row above everything it scopes, so every chart re-renders against the
           same slice. Per-chart period pickers make two charts disagree silently. */}
       <div className="filters">
-        <select
+        <PeriodPicker
           value={period}
-          onChange={(e) => {
-            const next = new URLSearchParams(params)
-            next.set('period', e.target.value)
-            setParams(next)
+          onChange={(next) => {
+            const params2 = new URLSearchParams(params)
+            params2.set('period', next)
+            setParams(params2)
           }}
-          aria-label="Period"
-        >
-          {PERIODS.map((option) => (
-            <option key={option} value={option}>
-              Last {option}
-            </option>
-          ))}
-        </select>
+        />
       </div>
 
       {empty && (
@@ -93,20 +85,30 @@ export function Dashboard() {
           different units, and putting them on one plot would need a second y-axis — which
           invents a correlation that is not in the data. */}
       <div className="charts">
-        <Chart title="Requests per hour">
-          <Sparkline values={series.throughput} unit=" req" />
+        <Chart title={`Requests per ${bucketLabel(data.bucket_seconds)}`}>
+          <Sparkline values={series.throughput} bucketSeconds={data.bucket_seconds} unit=" req" />
         </Chart>
-        <Chart title="p95 latency per hour">
-          <Sparkline values={series.p95} format={formatMs} />
+        <Chart title={`p95 latency per ${bucketLabel(data.bucket_seconds)}`}>
+          <Sparkline values={series.p95} bucketSeconds={data.bucket_seconds} format={formatMs} />
         </Chart>
-        <Chart title="Failed requests per hour">
-          <Sparkline values={series.failures} unit=" failed" tone="critical" />
+        <Chart title={`Failed requests per ${bucketLabel(data.bucket_seconds)}`}>
+          <Sparkline
+            values={series.failures}
+            bucketSeconds={data.bucket_seconds}
+            unit=" failed"
+            tone="critical"
+          />
         </Chart>
-        <Chart title="Errors captured per hour">
-          <Sparkline values={series.errors} unit=" errors" tone="critical" />
+        <Chart title={`Errors captured per ${bucketLabel(data.bucket_seconds)}`}>
+          <Sparkline
+            values={series.errors}
+            bucketSeconds={data.bucket_seconds}
+            unit=" errors"
+            tone="critical"
+          />
         </Chart>
-        <Chart title="Log records per hour">
-          <Sparkline values={series.logs} unit=" logs" />
+        <Chart title={`Log records per ${bucketLabel(data.bucket_seconds)}`}>
+          <Sparkline values={series.logs} bucketSeconds={data.bucket_seconds} unit=" logs" />
         </Chart>
       </div>
 

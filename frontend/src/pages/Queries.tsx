@@ -3,10 +3,9 @@ import { Link, useParams, useSearchParams } from 'react-router-dom'
 
 import { api, type SpanInsights } from '../api'
 import { Notice } from '../components/Notice'
+import { PeriodPicker } from '../components/PeriodPicker'
 import { handle } from '../errors'
 import { formatMs } from '../format'
-
-const PERIODS = ['1h', '24h', '7d', '30d']
 
 type SortKey = 'total_ms' | 'p95' | 'count' | 'per_transaction'
 
@@ -69,17 +68,7 @@ export function Queries() {
             </option>
           ))}
         </select>
-        <select
-          value={period}
-          onChange={(e) => update('period', e.target.value)}
-          aria-label="Period"
-        >
-          {PERIODS.map((option) => (
-            <option key={option} value={option}>
-              Last {option}
-            </option>
-          ))}
-        </select>
+        <PeriodPicker value={period} onChange={(next) => update('period', next)} />
         <select
           value={sort}
           onChange={(e) => setSort(e.target.value as SortKey)}

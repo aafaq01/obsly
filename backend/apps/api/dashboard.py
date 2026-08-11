@@ -8,14 +8,12 @@ the page line up with each other. Charts that disagree about what "three hours a
 worse than no charts: they invite conclusions the data does not support.
 """
 
-from collections.abc import Iterable
-from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from django.db.models import Avg, Count, Q, QuerySet
-from django.db.models.functions import TruncHour
 
-from apps.api.performance import Percentile, window
+from apps.api.performance import Percentile
+from apps.api.timewindow import PERIODS, Window, resolve
 from apps.events.models import Event
 from apps.issues.models import Issue, IssueStatus
 from apps.logs.models import LogRecord
@@ -23,8 +21,8 @@ from apps.tracing.models import SpanStatus, Transaction
 
 
 def overview(project_id: int, period: str) -> dict[str, Any]:
-    since, minutes = window(period)
-    buckets = _buckets(since)
+    win = resolve(period)
+    since, minutes = win.since, win.minutes
 
     transactions = Transaction.objects.filter(project_id=project_id, timestamp__gte=since)
     events = Event.objects.filter(project_id=project_id, timestamp__gte=since)
@@ -39,8 +37,10 @@ def overview(project_id: int, period: str) -> dict[str, Any]:
     total = totals["count"] or 0
 
     return {
-        "period": period,
-        "buckets": len(buckets),
+        "period": win.period,
+        "periods": list(PERIODS),
+        "buckets": len(win.buckets),
+        "bucket_seconds": win.bucket_seconds,
         "headline": {
             "transactions": total,
             "throughput_per_minute": round(total / minutes, 3) if minutes else 0,
@@ -53,39 +53,37 @@ def overview(project_id: int, period: str) -> dict[str, Any]:
             "logs": logs.count(),
         },
         "series": {
-            "throughput": _series(transactions, buckets),
-            "failures": _series(transactions.filter(status=SpanStatus.INTERNAL_ERROR), buckets),
-            "errors": _series(events, buckets),
-            "logs": _series(logs, buckets),
+            "throughput": _series(transactions, win),
+            "failures": _series(transactions.filter(status=SpanStatus.INTERNAL_ERROR), win),
+            "errors": _series(events, win),
+            "logs": _series(logs, win),
             # p95 per bucket rather than a mean of means. Averaging percentiles is not a
             # percentile of anything, and the resulting line is a number nobody measured.
-            "p95": _percentile_series(transactions, buckets),
+            "p95": _percentile_series(transactions, win),
         },
         "top_issues": _top_issues(project_id),
         "slowest_endpoints": _slowest_endpoints(transactions),
     }
 
 
-def _buckets(since: datetime) -> list[datetime]:
-    start = since.replace(minute=0, second=0, microsecond=0)
-    count = int((datetime.now(tz=UTC) - start).total_seconds() // 3600) + 1
-    return [start + timedelta(hours=offset) for offset in range(max(count, 1))]
+def _series(queryset: QuerySet[Any], win: Window) -> list[int]:
+    rows = queryset.annotate(bucket=win.truncate()).values("bucket").annotate(n=Count("id"))
+    return win.zero_filled({row["bucket"]: row["n"] for row in rows})
 
 
-def _series(queryset: QuerySet[Any], buckets: Iterable[datetime]) -> list[int]:
-    rows = queryset.annotate(hour=TruncHour("timestamp")).values("hour").annotate(n=Count("id"))
-    counts = {row["hour"]: row["n"] for row in rows}
-    return [counts.get(bucket, 0) for bucket in buckets]
+def _percentile_series(queryset: QuerySet[Transaction], win: Window) -> list[float]:
+    """p95 per bucket, computed by the database at the bucket's own granularity.
 
-
-def _percentile_series(queryset: QuerySet[Transaction], buckets: Iterable[datetime]) -> list[float]:
+    Computing it coarsely and re-splitting in Python would average percentiles, and an average
+    of percentiles is not a percentile of anything.
+    """
     rows = (
-        queryset.annotate(hour=TruncHour("timestamp"))
-        .values("hour")
+        queryset.annotate(bucket=win.truncate())
+        .values("bucket")
         .annotate(p95=Percentile("duration_ms", 0.95))
     )
-    values = {row["hour"]: round(row["p95"] or 0, 1) for row in rows}
-    return [values.get(bucket, 0.0) for bucket in buckets]
+    values = {row["bucket"]: round(row["p95"] or 0, 1) for row in rows}
+    return [values.get(bucket, 0.0) for bucket in win.buckets]
 
 
 def _top_issues(project_id: int, limit: int = 5) -> list[dict[str, Any]]:

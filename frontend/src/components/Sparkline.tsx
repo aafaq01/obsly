@@ -1,5 +1,7 @@
 import { useState } from 'react'
 
+import { agoLabel, humanSpan } from '../format'
+
 interface Props {
   values: number[]
   /** Rendered in the readout, e.g. "ms" or "req". */
@@ -8,6 +10,8 @@ interface Props {
   format?: (value: number) => string
   /** Status colouring for series where "up" is bad — failures, errors. */
   tone?: 'series' | 'critical'
+  /** What one point covers, so the axis can say so in the right unit. */
+  bucketSeconds?: number
 }
 
 const HEIGHT = 56
@@ -22,7 +26,13 @@ const WIDTH = 240
  * One series per chart, always. Two y-scales on one plot invent a correlation that is not in
  * the data, which is the most common way a dashboard misleads.
  */
-export function Sparkline({ values, unit = '', format, tone = 'series' }: Props) {
+export function Sparkline({
+  values,
+  unit = '',
+  format,
+  tone = 'series',
+  bucketSeconds = 3600,
+}: Props) {
   const [hover, setHover] = useState<number | null>(null)
 
   const max = Math.max(...values, 1)
@@ -40,7 +50,7 @@ export function Sparkline({ values, unit = '', format, tone = 'series' }: Props)
         <strong>{render(shown ?? 0)}</strong>
         {unit && <span className="spark__unit">{unit}</span>}
         <span className="spark__when">
-          {hover === null ? 'latest' : hoursAgo(values.length - 1 - hover)}
+          {hover === null ? 'latest' : agoLabel((values.length - 1 - hover) * bucketSeconds)}
         </span>
       </div>
 
@@ -49,7 +59,7 @@ export function Sparkline({ values, unit = '', format, tone = 'series' }: Props)
         viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
         preserveAspectRatio="none"
         role="img"
-        aria-label={`Trend over the last ${values.length} hours, peak ${render(max)}${unit}`}
+        aria-label={`Trend over the last ${humanSpan(values.length * bucketSeconds)}, peak ${render(max)}${unit}`}
         onMouseLeave={() => setHover(null)}
       >
         <polyline className="spark__line" points={points} />
@@ -76,14 +86,9 @@ export function Sparkline({ values, unit = '', format, tone = 'series' }: Props)
       </svg>
 
       <div className="spark__axis">
-        <span>{values.length}h ago</span>
+        <span>{humanSpan(values.length * bucketSeconds)} ago</span>
         <span>now</span>
       </div>
     </div>
   )
-}
-
-function hoursAgo(offset: number): string {
-  if (offset === 0) return 'this hour'
-  return `${offset}h ago`
 }

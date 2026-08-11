@@ -4,13 +4,12 @@ import { useParams, useSearchParams } from 'react-router-dom'
 import { api, type LogRecord } from '../api'
 import { LogList } from '../components/LogList'
 import { Notice } from '../components/Notice'
+import { PeriodPicker } from '../components/PeriodPicker'
 import { handle } from '../errors'
 
 // Ordered worst-last. "warning" means warning-and-worse: filtering to exactly one level hides
 // the errors, which is never what somebody meant by it.
 const LEVELS = ['trace', 'debug', 'info', 'warning', 'error', 'fatal']
-const PERIODS = ['1h', '24h', '7d']
-
 export function Logs() {
   const { projectId } = useParams()
   const [params, setParams] = useSearchParams()
@@ -87,17 +86,7 @@ export function Logs() {
             </option>
           ))}
         </select>
-        <select
-          value={period}
-          onChange={(e) => update('period', e.target.value)}
-          aria-label="Period"
-        >
-          {PERIODS.map((option) => (
-            <option key={option} value={option}>
-              Last {option}
-            </option>
-          ))}
-        </select>
+        <PeriodPicker value={period} onChange={(next) => update('period', next)} />
       </div>
 
       {records === null ? (
