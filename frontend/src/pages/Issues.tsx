@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 
 import { api, type Issue, type Project } from '../api'
-import { Notice } from '../components/Notice'
+import { Notice, Skeleton } from '../components/Notice'
 import { handle } from '../errors'
 import { EventChart } from '../components/EventChart'
 import { relativeTime } from '../time'
@@ -67,7 +67,7 @@ export function Issues() {
       </div>
 
       {issues === null ? (
-        <Notice>Loading issues…</Notice>
+        <Skeleton rows={6} />
       ) : issues.length === 0 ? (
         <Notice>
           <strong>No issues yet</strong>

@@ -1,6 +1,14 @@
 /* Palette values come from the data-viz reference palette and were run through its validator:
    the series blue passes the lightness band, chroma floor and 3:1 contrast on both surfaces.
-   Status colours are the reserved set and always ship beside a text label, never alone. */
+   Status colours are the reserved set and always ship beside a text label, never alone.
+
+   The chrome around them is an instrument panel, not a marketing dashboard. This is the tool
+   somebody opens at 3am to get from "something is wrong" to "here is the line of code", so the
+   interface speaks the same language as the data it shows: monospace for every measured value,
+   proportional sans reserved for prose, and a tick-mark rhythm in the spacing.
+
+   The surfaces are deliberately unchanged. They were validated against the series and status
+   colours, and repainting them would silently invalidate every contrast check that passed. */
 
 :root {
   color-scheme: light;
@@ -19,8 +27,28 @@
   --status-serious: #ec835a;
   --status-critical: #d03b3b;
 
+  /* Magnitude fill behind a measured value. Low alpha on purpose: it has to read as a
+     background quantity, never as a highlight competing with the digits in front of it. */
+  --magnitude: color-mix(in srgb, var(--series-1) 16%, transparent);
+
+  /* Data is monospace because that is what the subject is made of — durations, ids, statements,
+     stack frames. Sans is for prose only. */
   --font: system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --mono:
+    ui-monospace, 'Cascadia Mono', 'JetBrains Mono', SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* One scale, tick-spaced. Every margin and padding in the file is a multiple of it, so the
+     page has a rhythm rather than a collection of one-off numbers. */
+  --tick: 4px;
+  --s1: var(--tick);
+  --s2: calc(var(--tick) * 2);
+  --s3: calc(var(--tick) * 3);
+  --s4: calc(var(--tick) * 4);
+  --s6: calc(var(--tick) * 6);
+  --s8: calc(var(--tick) * 8);
+
+  --radius: 8px;
+  --radius-sm: 5px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -35,6 +63,7 @@
     --baseline: #383835;
     --border: rgba(255, 255, 255, 0.1);
     --series-1: #3987e5;
+    --magnitude: color-mix(in srgb, var(--series-1) 22%, transparent);
   }
 }
 
@@ -49,6 +78,7 @@
   --baseline: #383835;
   --border: rgba(255, 255, 255, 0.1);
   --series-1: #3987e5;
+  --magnitude: color-mix(in srgb, var(--series-1) 22%, transparent);
 }
 
 * {
@@ -62,11 +92,52 @@ body {
   font-family: var(--font);
   font-size: 14px;
   line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
 }
 
 a {
   color: inherit;
   text-decoration: none;
+}
+
+/* A visible focus ring everywhere, not only where somebody remembered one. Keyboard users
+   navigate this during an incident too. */
+:focus-visible {
+  outline: 2px solid var(--series-1);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* --- the signature: magnitude in the cell ---------------------------------- */
+
+/* A measured value carries a bar of its own size behind it, so a column of numbers reads as a
+   chart without being one. Scanning "which row is the problem" stops needing a second chart
+   beside the table.
+
+   The width is set inline from the data, because it is data — not styling. */
+.mag {
+  position: relative;
+  isolation: isolate;
+}
+
+.mag::before {
+  content: '';
+  position: absolute;
+  inset: 2px 0 2px auto;
+  right: 0;
+  width: var(--mag, 0%);
+  background: var(--magnitude);
+  border-radius: 2px;
+  z-index: -1;
 }
 
 /* --- layout ------------------------------------------------------------- */
@@ -111,11 +182,13 @@ a {
   padding: 24px 20px 64px;
 }
 
+/* Headings are tight and lower-contrast in size than a marketing page would use: this is a
+   working surface, and the data underneath is the thing that should draw the eye. */
 .page-title {
-  font-size: 20px;
+  font-size: 19px;
   font-weight: 650;
-  margin: 0 0 4px;
-  letter-spacing: -0.01em;
+  margin: 0 0 var(--s1);
+  letter-spacing: -0.02em;
 }
 
 .page-subtitle {
@@ -283,13 +356,16 @@ a {
   margin-top: 28px;
 }
 
+/* Section labels are the tick marks of the page: small, spaced, monospace — a scale label on
+   an instrument, not a headline. */
 .section__title {
-  font-size: 13px;
-  font-weight: 650;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--ink-secondary);
-  margin: 0 0 10px;
+  letter-spacing: 0.08em;
+  color: var(--ink-muted);
+  margin: 0 0 var(--s2);
 }
 
 .frames {
@@ -615,13 +691,14 @@ pre.raw {
 
 .perf th {
   text-align: left;
-  font-size: 11.5px;
-  font-weight: 650;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.07em;
   color: var(--ink-muted);
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--border);
+  padding: var(--s2) var(--s4);
+  border-bottom: 1px solid var(--baseline);
   white-space: nowrap;
 }
 
@@ -642,7 +719,11 @@ pre.raw {
 /* Latency columns must line up digit-for-digit or comparing two rows is guesswork. */
 .perf .num {
   text-align: right;
+  /* Measured values are monospace and tabular: a column of latencies is only scannable when
+     the digits line up. */
+  font-family: var(--mono);
   font-variant-numeric: tabular-nums;
+  font-size: 12.5px;
 }
 
 .perf .strong {
@@ -806,11 +887,12 @@ pre.raw {
 }
 
 .subnav__tabs a {
-  padding: 12px 12px;
-  font-size: 13.5px;
+  padding: var(--s3) var(--s3);
+  font-size: 13px;
   color: var(--ink-secondary);
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
+  transition: color 120ms ease;
 }
 
 .subnav__tabs a:hover {
@@ -967,15 +1049,17 @@ pre.raw {
 }
 
 .meta dt {
-  font-size: 11px;
+  font-family: var(--mono);
+  font-size: 10.5px;
   color: var(--ink-muted);
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.07em;
 }
 
 .meta dd {
   margin: 0;
-  font-size: 13.5px;
+  font-family: var(--mono);
+  font-size: 13px;
   font-weight: 600;
 }
 
@@ -1251,10 +1335,12 @@ pre.raw {
 
 /* Proportional figures, not tabular: equal-width digits make a large standalone number look
    loose. tabular-nums belongs in columns that align vertically. */
+/* Proportional figures on a large standalone number — tabular digits make it look loose at
+   display sizes. tabular-nums belongs in columns that align vertically. */
 .tile__value {
-  font-size: 22px;
-  font-weight: 650;
-  letter-spacing: -0.015em;
+  font-size: 24px;
+  font-weight: 620;
+  letter-spacing: -0.025em;
 }
 
 .tile__value--bad {
@@ -1262,10 +1348,11 @@ pre.raw {
 }
 
 .tile__label {
-  font-size: 11.5px;
+  font-family: var(--mono);
+  font-size: 10.5px;
   color: var(--ink-muted);
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.07em;
   margin-top: 2px;
 }
 
@@ -1286,12 +1373,13 @@ pre.raw {
 }
 
 .chartcard__title {
-  font-size: 12px;
-  font-weight: 650;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
-  color: var(--ink-secondary);
-  margin: 0 0 10px;
+  letter-spacing: 0.07em;
+  color: var(--ink-muted);
+  margin: 0 0 var(--s2);
 }
 
 .spark__readout {
@@ -1527,4 +1615,57 @@ a.mini-row:hover {
   background: var(--status-critical);
   border-color: var(--status-critical);
   color: #ffffff;
+}
+
+/* --- loading that holds its shape ------------------------------------------ */
+
+/* A skeleton, not a "Loading…" line. Replacing the whole page with one sentence and then
+   swapping in a table moves everything under the cursor at the moment somebody was about to
+   click. Holding the layout is the difference between a page that loads and a page that
+   lurches. */
+.skeleton {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.skeleton__row {
+  height: 46px;
+  border-bottom: 1px solid var(--border);
+  position: relative;
+  overflow: hidden;
+}
+
+.skeleton__row:last-child {
+  border-bottom: none;
+}
+
+.skeleton__row::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--ink) 5%, transparent),
+    transparent
+  );
+  animation: sweep 1.4s ease-in-out infinite;
+}
+
+@keyframes sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton__row::after {
+    animation: none;
+    background: color-mix(in srgb, var(--ink) 4%, transparent);
+  }
 }

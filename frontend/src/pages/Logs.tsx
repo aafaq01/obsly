@@ -3,7 +3,7 @@ import { useParams, useSearchParams } from 'react-router-dom'
 
 import { api, type LogRecord } from '../api'
 import { LogList } from '../components/LogList'
-import { Notice } from '../components/Notice'
+import { Notice, Skeleton } from '../components/Notice'
 import { PeriodPicker } from '../components/PeriodPicker'
 import { handle } from '../errors'
 
@@ -112,7 +112,7 @@ export function Logs() {
       </div>
 
       {records === null ? (
-        <Notice>Loading logs…</Notice>
+        <Skeleton rows={8} />
       ) : records.length === 0 ? (
         <Notice>
           <strong>No logs yet</strong>

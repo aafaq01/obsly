@@ -31,3 +31,8 @@ export function agoLabel(seconds: number): string {
   if (seconds === 0) return 'now'
   return `${humanSpan(seconds)} ago`
 }
+
+/** The largest value across rows for one key, for scaling a magnitude column. */
+export function columnMax<T>(rows: T[], pick: (row: T) => number): number {
+  return rows.reduce((max, row) => Math.max(max, pick(row)), 0)
+}

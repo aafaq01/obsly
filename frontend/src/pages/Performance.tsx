@@ -3,10 +3,11 @@ import { useParams } from 'react-router-dom'
 
 import { api, type Performance as PerformanceData } from '../api'
 import { EventChart } from '../components/EventChart'
-import { Notice } from '../components/Notice'
+import { Magnitude } from '../components/Magnitude'
+import { Notice, Skeleton } from '../components/Notice'
 import { PeriodPicker } from '../components/PeriodPicker'
 import { handle } from '../errors'
-import { bucketLabel } from '../format'
+import { bucketLabel, columnMax } from '../format'
 
 type SortKey = 'total_ms' | 'p95' | 'count' | 'failure_rate'
 
@@ -37,9 +38,14 @@ export function Performance() {
   }, [id, period])
 
   if (error) return <Notice>{error}</Notice>
-  if (!data) return <Notice>Loading performance…</Notice>
+  if (!data) return <Skeleton rows={6} />
 
   const rows = [...data.endpoints].sort((a, b) => b[sort] - a[sort])
+  // Each column scales to its own maximum: a p50 bar and a p99 bar on one absolute scale
+  // would make every p50 invisible.
+  const maxP95 = columnMax(rows, (row) => row.p95)
+  const maxTotal = columnMax(rows, (row) => row.total_ms)
+  const maxTpm = columnMax(rows, (row) => row.throughput_per_minute)
 
   return (
     <>
@@ -110,15 +116,21 @@ export function Performance() {
                       <span className="perf__name">{row.name}</span>
                       <span className="perf__op">{row.op}</span>
                     </td>
-                    <td className="num">{row.throughput_per_minute.toFixed(2)}</td>
+                    <Magnitude value={row.throughput_per_minute} max={maxTpm}>
+                      {row.throughput_per_minute.toFixed(2)}
+                    </Magnitude>
                     <td className="num">{ms(row.p50)}</td>
                     <td className="num">{ms(row.p75)}</td>
-                    <td className="num strong">{ms(row.p95)}</td>
+                    <Magnitude value={row.p95} max={maxP95} className="strong">
+                      {ms(row.p95)}
+                    </Magnitude>
                     <td className="num">{ms(row.p99)}</td>
                     <td className={`num ${row.failure_rate > 0 ? 'bad' : ''}`}>
                       {percent(row.failure_rate)}
                     </td>
-                    <td className="num">{seconds(row.total_ms)}</td>
+                    <Magnitude value={row.total_ms} max={maxTotal}>
+                      {seconds(row.total_ms)}
+                    </Magnitude>
                   </tr>
                 ))}
               </tbody>

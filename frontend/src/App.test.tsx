@@ -1078,3 +1078,83 @@ describe('Performance issues', () => {
     expect(screen.getByText('240ms')).toBeInTheDocument()
   })
 })
+
+describe('Instrument-panel UI', () => {
+  const PERF_ROWS = {
+    period: '24h',
+    endpoints: [
+      {
+        name: '/slow',
+        op: 'http.server',
+        count: 10,
+        throughput_per_minute: 0.1,
+        failure_rate: 0,
+        total_ms: 10000,
+        p50: 900,
+        p75: 950,
+        p95: 1000,
+        p99: 1100,
+      },
+      {
+        name: '/fast',
+        op: 'http.server',
+        count: 10,
+        throughput_per_minute: 0.1,
+        failure_rate: 0,
+        total_ms: 100,
+        p50: 9,
+        p75: 9,
+        p95: 10,
+        p99: 11,
+      },
+    ],
+    summary: {
+      transactions: 20,
+      throughput_per_minute: 0.2,
+      failure_rate: 0,
+      series: [20],
+      bucket_seconds: 3600,
+    },
+  }
+
+  it('scales a magnitude bar to its own column', async () => {
+    // The signature element: a column of latencies reads as a chart, so the outlier is visible
+    // before anybody parses a digit.
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/1/': { body: { ...PROJECT, keys: [] } },
+      '/projects/1/performance/': { body: PERF_ROWS },
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/projects/1/performance']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    await screen.findByText('/slow')
+    const bars = [...document.querySelectorAll('.mag')].map((cell) =>
+      (cell as HTMLElement).style.getPropertyValue('--mag'),
+    )
+    expect(bars).toContain('100%')
+    // 10ms against a 1000ms maximum is 1%, not "small but visible" — the bar has to be honest.
+    expect(bars).toContain('1%')
+  })
+
+  it('shows a skeleton that holds the layout rather than a loading sentence', async () => {
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/1/': { body: { ...PROJECT, keys: [] } },
+      '/projects/1/issues/': { body: new Promise(() => {}) as never },
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/projects/1/issues']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByLabelText('Loading')).toBeInTheDocument()
+    expect(document.querySelectorAll('.skeleton__row').length).toBeGreaterThan(0)
+  })
+})

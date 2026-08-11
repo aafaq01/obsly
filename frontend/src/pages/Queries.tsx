@@ -2,10 +2,11 @@ import { useEffect, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 
 import { api, type SpanInsights } from '../api'
-import { Notice } from '../components/Notice'
+import { Magnitude } from '../components/Magnitude'
+import { Notice, Skeleton } from '../components/Notice'
 import { PeriodPicker } from '../components/PeriodPicker'
 import { handle } from '../errors'
-import { formatMs } from '../format'
+import { columnMax, formatMs } from '../format'
 
 type SortKey = 'total_ms' | 'p95' | 'count' | 'per_transaction'
 
@@ -40,9 +41,12 @@ export function Queries() {
   }, [id, period, op])
 
   if (error) return <Notice>{error}</Notice>
-  if (!data) return <Notice>Loading spans…</Notice>
+  if (!data) return <Skeleton rows={6} />
 
   const rows = [...data.spans].sort((a, b) => b[sort] - a[sort])
+  const maxTotal = columnMax(rows, (row) => row.total_ms)
+  const maxP95 = columnMax(rows, (row) => row.p95)
+  const maxCalls = columnMax(rows, (row) => row.count)
 
   function update(key: string, value: string) {
     const next = new URLSearchParams(params)
@@ -108,7 +112,9 @@ export function Queries() {
                     <span className="perf__name">{row.description || '(no description)'}</span>
                     <span className="perf__op">{row.op}</span>
                   </td>
-                  <td className="num">{row.count.toLocaleString()}</td>
+                  <Magnitude value={row.count} max={maxCalls}>
+                    {row.count.toLocaleString()}
+                  </Magnitude>
                   {/* Above ~5 for a db.query this is the signature of an N+1: the same
                       statement running once per row of some earlier result. */}
                   <td className={`num ${row.per_transaction >= 5 ? 'bad' : ''}`}>
@@ -120,8 +126,12 @@ export function Queries() {
                     )}
                   </td>
                   <td className="num">{formatMs(row.p50)}</td>
-                  <td className="num strong">{formatMs(row.p95)}</td>
-                  <td className="num">{formatMs(row.total_ms)}</td>
+                  <Magnitude value={row.p95} max={maxP95} className="strong">
+                    {formatMs(row.p95)}
+                  </Magnitude>
+                  <Magnitude value={row.total_ms} max={maxTotal}>
+                    {formatMs(row.total_ms)}
+                  </Magnitude>
                 </tr>
               ))}
             </tbody>
