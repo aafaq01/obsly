@@ -1086,67 +1086,6 @@ describe('Performance issues', () => {
 })
 
 describe('Instrument-panel UI', () => {
-  const PERF_ROWS = {
-    period: '24h',
-    endpoints: [
-      {
-        name: '/slow',
-        op: 'http.server',
-        count: 10,
-        throughput_per_minute: 0.1,
-        failure_rate: 0,
-        total_ms: 10000,
-        p50: 900,
-        p75: 950,
-        p95: 1000,
-        p99: 1100,
-      },
-      {
-        name: '/fast',
-        op: 'http.server',
-        count: 10,
-        throughput_per_minute: 0.1,
-        failure_rate: 0,
-        total_ms: 100,
-        p50: 9,
-        p75: 9,
-        p95: 10,
-        p99: 11,
-      },
-    ],
-    summary: {
-      transactions: 20,
-      throughput_per_minute: 0.2,
-      failure_rate: 0,
-      series: [20],
-      bucket_seconds: 3600,
-    },
-  }
-
-  it('scales a magnitude bar to its own column', async () => {
-    // The signature element: a column of latencies reads as a chart, so the outlier is visible
-    // before anybody parses a digit.
-    mockApi({
-      '/me/': { body: { authenticated: true, username: 'admin' } },
-      '/projects/1/': { body: { ...PROJECT, keys: [] } },
-      '/projects/1/performance/': { body: PERF_ROWS },
-    })
-
-    render(
-      <MemoryRouter initialEntries={['/projects/1/performance']}>
-        <App />
-      </MemoryRouter>,
-    )
-
-    await screen.findByRole('table')
-    const bars = [...document.querySelectorAll('.mag')].map((cell) =>
-      (cell as HTMLElement).style.getPropertyValue('--mag'),
-    )
-    expect(bars).toContain('100%')
-    // 10ms against a 1000ms maximum is 1%, not "small but visible" — the bar has to be honest.
-    expect(bars).toContain('1%')
-  })
-
   it('shows a skeleton that holds the layout rather than a loading sentence', async () => {
     mockApi({
       '/me/': { body: { authenticated: true, username: 'admin' } },
@@ -1245,7 +1184,7 @@ describe('Span detail', () => {
 
     renderDetail()
 
-    await screen.findByText('Duration distribution')
+    await screen.findByText('How long these calls take')
     expect(document.querySelectorAll('.dist__bar')).toHaveLength(20)
   })
 
@@ -1435,6 +1374,42 @@ describe('Rank charts', () => {
     ).toBeInTheDocument()
   })
 
+  it('carries the window and the op through to the endpoint it links to', async () => {
+    // The table groups by (name, op), so a link that names only the endpoint can land on
+    // merged figures matching neither row. The period has to survive the trip too, or a 7d
+    // view silently becomes a 24h one on the way back.
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/1/': { body: { ...PROJECT, keys: [] } },
+      '/projects/1/performance/': { body: PERF },
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/projects/1/performance?period=7d']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    await screen.findByText('Top endpoints by time spent')
+    const links = [...document.querySelectorAll('a.perf__link')].map((a) => a.getAttribute('href'))
+    expect(links).toContain('/projects/1/endpoint?period=7d&name=%2Fslow&op=http.server')
+  })
+
+  it('keeps the latency columns in the aligned monospace figures', async () => {
+    // These read as a column of numbers only while they are tabular and right-aligned. A
+    // missing separator in the class attribute is invisible in review and obvious on screen.
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/1/': { body: { ...PROJECT, keys: [] } },
+      '/projects/1/performance/': { body: PERF },
+    })
+
+    renderPerf()
+
+    const p95 = await screen.findByText('1.00s')
+    expect(p95).toHaveClass('num', 'strong')
+  })
+
   it('scales the longest bar to full width and the rest against it', async () => {
     mockApi({
       '/me/': { body: { authenticated: true, username: 'admin' } },
@@ -1578,7 +1553,7 @@ describe('Review findings', () => {
     const chart = await screen.findByRole('figure')
     await userEvent.click(within(chart).getByRole('link'))
 
-    expect(await screen.findByText('Duration distribution')).toBeInTheDocument()
+    expect(await screen.findByText('How long these calls take')).toBeInTheDocument()
   })
 
   it('does not stack an empty chart on top of an empty state', async () => {
@@ -1608,5 +1583,123 @@ describe('Review findings', () => {
 
     expect(await screen.findByText(/No transactions yet/)).toBeInTheDocument()
     expect(screen.queryByText(/Nothing to rank yet/)).not.toBeInTheDocument()
+  })
+})
+
+describe('Endpoint detail', () => {
+  const DETAIL = {
+    name: '/checkout/{cart_id}',
+    period: '24h',
+    summary: {
+      count: 27,
+      failure_rate: 0.667,
+      throughput_per_minute: 0.02,
+      total_ms: 2900,
+      p50: 196,
+      p95: 365,
+      p99: 394,
+      slowest: 400,
+    },
+    distribution: Array.from({ length: 20 }, (_, i) => ({
+      from_ms: i * 20,
+      to_ms: (i + 1) * 20,
+      count: i === 9 ? 20 : 0,
+    })),
+    spans: [
+      {
+        op: 'http.client',
+        description: 'POST payments.example.com/charge',
+        count: 27,
+        total_ms: 2500,
+        p95: 380,
+        share: 0.86,
+      },
+      {
+        op: 'db.query',
+        description: 'SELECT * FROM carts',
+        count: 27,
+        total_ms: 174,
+        p95: 18,
+        share: 0.06,
+      },
+    ],
+    samples: [
+      {
+        transaction_id: 'txn-1',
+        duration_ms: 400,
+        status: 'internal_error',
+        trace_id: 'a'.repeat(32),
+        timestamp: new Date().toISOString(),
+      },
+    ],
+  }
+
+  function renderEndpoint() {
+    return render(
+      <MemoryRouter initialEntries={['/projects/1/endpoint?name=%2Fcheckout%2F%7Bcart_id%7D']}>
+        <App />
+      </MemoryRouter>,
+    )
+  }
+
+  it('shows where the endpoint spends its time, with each span share', async () => {
+    // The share is what says whether fixing a span would move the endpoint at all.
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/1/': { body: { ...PROJECT, keys: [] } },
+      '/projects/1/endpoint/': { body: DETAIL },
+    })
+
+    renderEndpoint()
+
+    expect(await screen.findByText('Where its time goes')).toBeInTheDocument()
+    expect(screen.getByText(/86% of this endpoint/)).toBeInTheDocument()
+  })
+
+  it('links each span onward to its own detail page', async () => {
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/1/': { body: { ...PROJECT, keys: [] } },
+      '/projects/1/endpoint/': { body: DETAIL },
+    })
+
+    renderEndpoint()
+
+    await screen.findByText('Where its time goes')
+    const links = screen.getAllByRole('link').map((a) => a.getAttribute('href'))
+    expect(links.some((href) => href?.includes('/projects/1/span?'))).toBe(true)
+  })
+
+  it('labels the distribution in milliseconds, not clock time', async () => {
+    // The x-axis is duration. "24h ago" here would be the wrong unit entirely.
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/1/': { body: { ...PROJECT, keys: [] } },
+      '/projects/1/endpoint/': { body: DETAIL },
+    })
+
+    renderEndpoint()
+
+    expect(await screen.findByText('How long its requests take')).toBeInTheDocument()
+
+    // Scoped to the histogram specifically: the page has two figures, and 400ms is also the
+    // "Slowest" value in the meta strip above them.
+    const chart = screen.getByRole('img', { name: /How long 27 requests took/ }).parentElement!
+    expect(within(chart).getAllByText('400ms').length).toBeGreaterThan(0)
+    expect(within(chart).queryByText(/ago/)).not.toBeInTheDocument()
+  })
+
+  it('says so when nothing inside the request is instrumented', async () => {
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/1/': { body: { ...PROJECT, keys: [] } },
+      '/projects/1/endpoint/': { body: { ...DETAIL, spans: [] } },
+    })
+
+    renderEndpoint()
+
+    expect(
+      await screen.findByText(/Nothing inside this request is instrumented/),
+    ).toBeInTheDocument()
   })
 })

@@ -221,10 +221,103 @@ def span_detail(
     }
 
 
+MAX_SPANS_IN_DETAIL = 10
+
+
+def endpoint_detail(
+    project_id: int, period: str, *, name: str, op: str = ""
+) -> dict[str, Any] | None:
+    """One endpoint: how long it takes, where that time goes, and requests to open.
+
+    The table ranks endpoints against each other. This answers the question that always comes
+    next — "and what is it doing" — by attributing the endpoint's time to the operations
+    inside it.
+    """
+    win = resolve(period)
+    transactions = Transaction.objects.filter(
+        project_id=project_id, timestamp__gte=win.since, name=name
+    )
+    # The summary table groups by (name, op), so two rows can share a name. Filtering on the
+    # name alone would merge them into figures matching neither row you clicked.
+    if op:
+        transactions = transactions.filter(op=op)
+
+    totals = transactions.aggregate(
+        count=Count("id"),
+        failures=Count("id", filter=~Q(status=SpanStatus.OK)),
+        total_ms=Sum("duration_ms"),
+        p50=Percentile("duration_ms", 0.5),
+        p95=Percentile("duration_ms", 0.95),
+        p99=Percentile("duration_ms", 0.99),
+        slowest=Max("duration_ms"),
+    )
+    if not totals["count"]:
+        return None
+
+    spans = (
+        Span.objects.filter(transaction__in=transactions)
+        .values("op", "description")
+        .annotate(
+            count=Count("id"),
+            total_ms=Sum("duration_ms"),
+            p95=Percentile("duration_ms", 0.95),
+        )
+        .order_by(F("total_ms").desc())[:MAX_SPANS_IN_DETAIL]
+    )
+
+    # Slowest first: sorted by time this shows what happened last; sorted by duration it shows
+    # the request worth opening.
+    samples = transactions.order_by("-duration_ms")[:10].values(
+        "id", "trace_id", "duration_ms", "timestamp", "status"
+    )
+
+    minutes = max(win.minutes, 1)
+
+    return {
+        "name": name,
+        "op": op,
+        "period": win.period,
+        "summary": {
+            "count": totals["count"],
+            "throughput_per_minute": round(totals["count"] / minutes, 2),
+            "failure_rate": round(totals["failures"] / totals["count"], 4),
+            "total_ms": round(totals["total_ms"] or 0, 1),
+            "p50": round(totals["p50"] or 0, 1),
+            "p95": round(totals["p95"] or 0, 1),
+            "p99": round(totals["p99"] or 0, 1),
+            "slowest": round(totals["slowest"] or 0, 1),
+        },
+        "distribution": _duration_histogram(transactions, totals["slowest"] or 0),
+        "spans": [
+            {
+                "op": row["op"],
+                "description": row["description"],
+                "count": row["count"],
+                "total_ms": round(row["total_ms"] or 0, 1),
+                "p95": round(row["p95"] or 0, 1),
+                # The number that says whether fixing this span would move the endpoint at all:
+                # a 2ms query at 40% of the time matters more than a 200ms one at 3%.
+                "share": round((row["total_ms"] or 0) / (totals["total_ms"] or 1), 4),
+            }
+            for row in spans
+        ],
+        "samples": [
+            {
+                "transaction_id": str(row["id"]),
+                "trace_id": row["trace_id"],
+                "duration_ms": round(row["duration_ms"], 1),
+                "timestamp": row["timestamp"],
+                "status": row["status"],
+            }
+            for row in samples
+        ],
+    }
+
+
 DISTRIBUTION_BUCKETS = 20
 
 
-def _duration_histogram(spans: QuerySet[Span], slowest: float) -> list[dict[str, Any]]:
+def _duration_histogram(rows: QuerySet[Any], slowest: float) -> list[dict[str, Any]]:
     """How the durations are actually spread.
 
     A p50 and a p95 describe two points. The shape between them is what says whether this is
@@ -237,8 +330,8 @@ def _duration_histogram(spans: QuerySet[Span], slowest: float) -> list[dict[str,
     width = slowest / DISTRIBUTION_BUCKETS
     # Bucketed in SQL: pulling every duration into Python to histogram it is the scan the
     # database exists to do.
-    rows = (
-        spans.annotate(
+    bucketed = (
+        rows.annotate(
             bucket=Least(
                 Floor(F("duration_ms") / Value(width)),
                 Value(float(DISTRIBUTION_BUCKETS - 1)),
@@ -247,7 +340,7 @@ def _duration_histogram(spans: QuerySet[Span], slowest: float) -> list[dict[str,
         .values("bucket")
         .annotate(count=Count("id"))
     )
-    counts = {int(row["bucket"]): row["count"] for row in rows if row["bucket"] is not None}
+    counts = {int(row["bucket"]): row["count"] for row in bucketed if row["bucket"] is not None}
 
     return [
         {

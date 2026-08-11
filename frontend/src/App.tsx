@@ -5,6 +5,7 @@ import { api } from './api'
 import { Notice } from './components/Notice'
 import { ProjectLayout } from './components/ProjectLayout'
 import { Dashboard } from './pages/Dashboard'
+import { EndpointDetail } from './pages/EndpointDetail'
 import { IssueDetailPage } from './pages/IssueDetailPage'
 import { Issues } from './pages/Issues'
 import { Login } from './pages/Login'
@@ -84,6 +85,7 @@ export function App() {
               <Route path="traces" element={<Traces />} />
               <Route path="spans" element={<Queries />} />
               <Route path="span" element={<SpanDetail />} />
+              <Route path="endpoint" element={<EndpointDetail />} />
               <Route path="logs" element={<Logs />} />
               <Route path="settings" element={<ProjectSettings />} />
 

@@ -27,10 +27,6 @@
   --status-serious: #ec835a;
   --status-critical: #d03b3b;
 
-  /* Magnitude fill behind a measured value. Low alpha on purpose: it has to read as a
-     background quantity, never as a highlight competing with the digits in front of it. */
-  --magnitude: color-mix(in srgb, var(--ink) 22%, transparent);
-
   /* Data is monospace because that is what the subject is made of — durations, ids, statements,
      stack frames. Sans is for prose only. */
   --font: system-ui, -apple-system, 'Segoe UI', sans-serif;
@@ -63,7 +59,6 @@
     --baseline: #383835;
     --border: rgba(255, 255, 255, 0.1);
     --series-1: #3987e5;
-    --magnitude: color-mix(in srgb, var(--ink) 28%, transparent);
   }
 }
 
@@ -78,7 +73,6 @@
   --baseline: #383835;
   --border: rgba(255, 255, 255, 0.1);
   --series-1: #3987e5;
-  --magnitude: color-mix(in srgb, var(--ink) 28%, transparent);
 }
 
 * {
@@ -115,40 +109,6 @@ a {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
-}
-
-/* --- the signature: magnitude in the cell ---------------------------------- */
-
-/* A measured value carries a rule of its own size beneath it, so a column of numbers reads as
-   a small bar chart.
-
-   First attempt filled the whole cell behind the number. It read as a highlight rather than a
-   quantity — cells looked arbitrarily selected, and the first question anybody asked was "what
-   are these?". A mark that has to be explained is not carrying information, so this is now a
-   3px rule on the baseline: unmistakably a bar, quiet enough that the digits stay the subject.
-
-   The width is set inline from the data, because it is data — not styling. */
-.mag {
-  position: relative;
-}
-
-.mag::after {
-  content: '';
-  position: absolute;
-  right: var(--s4);
-  bottom: 5px;
-  height: 3px;
-  width: calc(var(--mag, 0%) * 0.62);
-  max-width: calc(100% - var(--s8));
-  background: var(--magnitude);
-  border-radius: 2px;
-}
-
-/* Only the ranking column gets the strong tint; the rest stay a hairline, so one column leads
-   the eye rather than six competing. */
-.mag--lead::after {
-  background: var(--series-1);
-  opacity: 0.55;
 }
 
 /* --- layout ------------------------------------------------------------- */
@@ -1859,4 +1819,15 @@ a.rank__row:hover .rank__name {
   font-size: 11.5px;
   color: var(--ink-muted);
   margin: var(--s2) 0 0;
+}
+
+/* --- distribution ---------------------------------------------------------- */
+
+.dist-figure {
+  margin: 0;
+}
+
+.dist__bar--empty {
+  background: var(--baseline);
+  border-radius: 0;
 }

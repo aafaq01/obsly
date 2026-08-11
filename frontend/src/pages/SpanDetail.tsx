@@ -3,6 +3,7 @@ import { Link, useParams, useSearchParams } from 'react-router-dom'
 
 import { api, type SpanDetail as Detail } from '../api'
 import { Breadcrumbs } from '../components/Breadcrumbs'
+import { Distribution } from '../components/Distribution'
 import { Notice, Skeleton } from '../components/Notice'
 import { handle } from '../errors'
 import { columnMax, formatMs } from '../format'
@@ -43,7 +44,6 @@ export function SpanDetail() {
   if (!detail) return <Skeleton rows={5} />
 
   const { summary, distribution, callers, samples } = detail
-  const peak = columnMax(distribution, (bucket) => bucket.count)
   const callerMax = columnMax(callers, (caller) => caller.total_ms)
 
   return (
@@ -69,34 +69,14 @@ export function SpanDetail() {
       </dl>
 
       <div className="section">
-        <h2 className="section__title">Duration distribution</h2>
+        <h2 className="section__title">How long these calls take</h2>
         <div className="card card--tight">
-          {/* A p50 and a p95 describe two points. The shape between them says whether this is
-              one slow tail or two behaviours wearing the same statement — and those need
-              different fixes. */}
-          <div
-            className="dist"
-            role="img"
-            aria-label={`Duration distribution, ${summary.count} calls`}
-          >
-            {distribution.map((bucket, index) => (
-              <div
-                className="dist__slot"
-                key={index}
-                title={`${bucket.count} calls between ${formatMs(bucket.from_ms)} and ${formatMs(bucket.to_ms)}`}
-              >
-                <div
-                  className="dist__bar"
-                  style={{ height: bucket.count === 0 ? '1px' : `${(bucket.count / peak) * 100}%` }}
-                />
-              </div>
-            ))}
-          </div>
-          <div className="chart2__xaxis" style={{ paddingLeft: 0 }}>
-            <span>{formatMs(0)}</span>
-            <span>{formatMs(summary.slowest / 2)}</span>
-            <span>{formatMs(summary.slowest)}</span>
-          </div>
+          <Distribution
+            buckets={distribution}
+            total={summary.count}
+            slowest={summary.slowest}
+            unit="calls"
+          />
         </div>
       </div>
 

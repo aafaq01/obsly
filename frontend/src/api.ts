@@ -64,6 +64,37 @@ export interface SpanStats {
   p95: number
 }
 
+export interface EndpointDetail {
+  name: string
+  period: string
+  summary: {
+    count: number
+    failure_rate: number
+    throughput_per_minute: number
+    total_ms: number
+    p50: number
+    p95: number
+    p99: number
+    slowest: number
+  }
+  distribution: { from_ms: number; to_ms: number; count: number }[]
+  spans: {
+    op: string
+    description: string
+    count: number
+    total_ms: number
+    p95: number
+    share: number
+  }[]
+  samples: {
+    transaction_id: string
+    duration_ms: number
+    status: string
+    trace_id: string
+    timestamp: string
+  }[]
+}
+
 export interface SpanDetail {
   op: string
   description: string
@@ -356,6 +387,11 @@ export const api = {
     get<LogRecord[]>(`/projects/${projectId}/logs/?${params.toString()}`),
   dashboard: (projectId: number, period: string) =>
     get<Dashboard>(`/projects/${projectId}/dashboard/?period=${period}`),
+  endpointDetail: (projectId: number, period: string, name: string, op: string) =>
+    get<EndpointDetail>(
+      `/projects/${projectId}/endpoint/?period=${period}&name=${encodeURIComponent(name)}` +
+        `&op=${encodeURIComponent(op)}`,
+    ),
   spanDetail: (projectId: number, period: string, op: string, description: string) =>
     get<SpanDetail>(
       `/projects/${projectId}/span/?period=${period}&op=${encodeURIComponent(op)}` +
