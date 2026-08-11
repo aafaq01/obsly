@@ -282,6 +282,39 @@ export interface TagValue {
   percentage: number
 }
 
+export type AlertTrigger = 'new_issue' | 'regression' | 'frequency'
+
+export interface AlertRule {
+  id: number
+  name: string
+  trigger: AlertTrigger
+  trigger_label: string
+  threshold: number
+  window_minutes: number
+  level: string
+  webhook_url: string
+  cooldown_minutes: number
+  enabled: boolean
+  created_at: string
+  /** So the page can say whether a rule has ever done anything — a rules list that cannot
+   *  is one that hides its own misconfiguration. */
+  fire_count: number
+  last_fired_at: string | null
+}
+
+export interface AlertFire {
+  id: number
+  rule_name: string
+  issue: number
+  issue_title: string
+  issue_level: string
+  reason: string
+  delivery: 'pending' | 'sent' | 'failed'
+  status_code: number | null
+  error: string
+  created_at: string
+}
+
 export interface IssueDetail {
   issue: Issue & {
     fingerprint: string
@@ -322,25 +355,47 @@ function csrfToken(): string {
   return /(?:^|;\s*)csrftoken=([^;]*)/.exec(document.cookie)?.[1] ?? ''
 }
 
-async function patch<T>(path: string, body: unknown): Promise<T> {
+/**
+ * Every write, one function.
+ *
+ * PATCH and POST were separate copies that had drifted: one surfaced the server's `detail`
+ * message and the other flattened it into a status code, so the same validation error read
+ * differently depending on which verb hit it.
+ */
+async function send<T>(
+  path: string,
+  method: string,
+  body?: unknown,
+  // A 401 usually means the session ended. On the sign-in request it means these credentials
+  // are wrong — the user has no session to lose — and flattening that into "not signed in"
+  // hides the only message that helps them.
+  options: { authIsCredentialError?: boolean } = {},
+): Promise<T> {
   const response = await fetch(`/api/0${path}`, {
-    method: 'PATCH',
+    method,
     headers: {
       'Content-Type': 'application/json',
       Accept: 'application/json',
       'X-CSRFToken': csrfToken(),
     },
-    body: JSON.stringify(body),
+    // Spread rather than `body: undefined` — under exactOptionalPropertyTypes those are
+    // different things, and a DELETE genuinely has no body rather than an empty one.
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   })
 
-  if (response.status === 401 || response.status === 403) {
+  if ((response.status === 401 || response.status === 403) && !options.authIsCredentialError) {
     throw new UnauthorizedError('not signed in')
   }
+
+  // A 204 has no body to parse, and DELETE is the common case.
+  const payload = (await response.json().catch(() => ({}))) as { detail?: string }
   if (!response.ok) {
-    throw new Error(`${path} returned ${response.status}`)
+    throw new Error(payload.detail ?? `${path} returned ${response.status}`)
   }
-  return (await response.json()) as T
+  return payload as T
 }
+
+const patch = <T>(path: string, body: unknown) => send<T>(path, 'PATCH', body)
 
 export interface Session {
   authenticated: boolean
@@ -349,28 +404,12 @@ export interface Session {
 
 /** The message the server sent, so "Incorrect username or password" reaches the user instead
  *  of being flattened into a status code. */
-async function post<T>(path: string, body: unknown): Promise<T> {
-  const response = await fetch(`/api/0${path}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-      'X-CSRFToken': csrfToken(),
-    },
-    body: JSON.stringify(body),
-  })
-
-  const payload = (await response.json().catch(() => ({}))) as { detail?: string }
-  if (!response.ok) {
-    throw new Error(payload.detail ?? `${path} returned ${response.status}`)
-  }
-  return payload as T
-}
+const post = <T>(path: string, body: unknown) => send<T>(path, 'POST', body)
 
 export const api = {
   session: () => get<Session>('/me/'),
   login: (username: string, password: string) =>
-    post<Session>('/auth/login/', { username, password }),
+    send<Session>('/auth/login/', 'POST', { username, password }, { authIsCredentialError: true }),
   logout: () => post<Session>('/auth/logout/', {}),
   projects: () => get<Project[]>('/projects/'),
   organizations: () => get<Organization[]>('/organizations/'),
@@ -390,6 +429,14 @@ export const api = {
   issues: (projectId: number, params: URLSearchParams) =>
     get<Issue[]>(`/projects/${projectId}/issues/?${params.toString()}`),
   issue: (id: number) => get<IssueDetail>(`/issues/${id}/`),
+  alertRules: (projectId: number) => get<AlertRule[]>(`/projects/${projectId}/alert-rules/`),
+  createAlertRule: (projectId: number, rule: Partial<AlertRule>) =>
+    send<AlertRule>(`/projects/${projectId}/alert-rules/`, 'POST', rule),
+  updateAlertRule: (id: number, patch: Partial<AlertRule>) =>
+    send<AlertRule>(`/alert-rules/${id}/`, 'PATCH', patch),
+  deleteAlertRule: (id: number) => send<null>(`/alert-rules/${id}/`, 'DELETE'),
+  testAlertRule: (id: number) => send<AlertFire>(`/alert-rules/${id}/test/`, 'POST'),
+  alerts: (projectId: number) => get<AlertFire[]>(`/projects/${projectId}/alerts/`),
   traces: (projectId: number, params: URLSearchParams) =>
     get<TraceSummary[]>(`/projects/${projectId}/traces/?${params.toString()}`),
   trace: (id: string) => get<TraceDetail>(`/traces/${id}/`),

@@ -27,6 +27,9 @@ services:
       DJANGO_HTTPS: "False"
       DJANGO_ALLOWED_HOSTS: localhost,127.0.0.1,backend
       DATABASE_URL: postgres://obsly:obsly@postgres:5432/obsly
+      # Where alert notifications link back to. Without it the payload carries no URL
+      # rather than one that resolves to the receiver's own machine.
+      OBSLY_PUBLIC_URL: ${OBSLY_PUBLIC_URL:-http://localhost:8081}
     # ponytail: migrate on boot is right for one instance; move to a job before running
     # replicas, or they race each other on the same migration.
     command: >

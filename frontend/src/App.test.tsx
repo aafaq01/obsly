@@ -1734,3 +1734,105 @@ describe('Endpoint detail', () => {
     ).toBeInTheDocument()
   })
 })
+
+describe('Alerts', () => {
+  const RULE = {
+    id: 3,
+    name: 'Page the on-call',
+    trigger: 'new_issue' as const,
+    trigger_label: 'A new issue appears',
+    threshold: 25,
+    window_minutes: 5,
+    level: 'error',
+    webhook_url: 'https://hooks.slack.com/services/T/B/x',
+    cooldown_minutes: 30,
+    enabled: true,
+    created_at: new Date().toISOString(),
+    fire_count: 0,
+    last_fired_at: null,
+  }
+
+  const FIRE = {
+    id: 1,
+    rule_name: 'Page the on-call',
+    issue: 9,
+    issue_title: 'ValueError: cart is empty',
+    issue_level: 'error',
+    reason: 'New error issue in Checkout',
+    delivery: 'failed' as const,
+    status_code: 410,
+    error: 'HTTP 410',
+    created_at: new Date(Date.now() - 60_000).toISOString(),
+  }
+
+  function mount(rules: unknown[], fires: unknown[]) {
+    const fetchMock = mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/1/': { body: { ...PROJECT, keys: [] } },
+      '/projects/1/alert-rules/': { body: rules },
+      '/projects/1/alerts/': { body: fires },
+      '/alert-rules/3/test/': { body: { ...FIRE, delivery: 'sent', status_code: 200 } },
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/projects/1/alerts']}>
+        <App />
+      </MemoryRouter>,
+    )
+    return fetchMock
+  }
+
+  it('says plainly that no rules means nothing will reach you', async () => {
+    // "No alert rules" reads as a neutral state. It is not — it means the push half of the
+    // product is switched off.
+    mount([], [])
+
+    expect(await screen.findByText(/nothing here will ever reach you/)).toBeInTheDocument()
+  })
+
+  it('shows whether a rule has ever fired', async () => {
+    // A rules list that cannot answer this is how a broken webhook stays broken.
+    mount([RULE], [])
+
+    expect(await screen.findByText('never fired')).toBeInTheDocument()
+  })
+
+  it('shows a failed delivery rather than hiding it', async () => {
+    // "We were not told" and "nothing happened" must not look the same.
+    mount([RULE], [FIRE])
+
+    expect(await screen.findByText(/failed 410/)).toBeInTheDocument()
+    expect(screen.getByText('ValueError: cart is empty')).toBeInTheDocument()
+  })
+
+  it('explains what a trigger will do before the rule is saved', async () => {
+    mount([], [])
+
+    expect(await screen.findByText(/the one nobody has triaged yet/)).toBeInTheDocument()
+
+    await userEvent.selectOptions(screen.getByLabelText(/Trigger/), 'regression')
+    expect(screen.getByText(/the issue is not new, it came back/)).toBeInTheDocument()
+  })
+
+  it('asks for a threshold only when the trigger needs one', async () => {
+    // A "within minutes" box on a "new issue" rule is a question with no answer.
+    mount([], [])
+
+    await screen.findByLabelText(/Trigger/)
+    expect(screen.queryByLabelText(/Within/)).not.toBeInTheDocument()
+
+    await userEvent.selectOptions(screen.getByLabelText(/Trigger/), 'frequency')
+    expect(screen.getByLabelText(/Within/)).toBeInTheDocument()
+  })
+
+  it('lets a rule be tested before an incident needs it', async () => {
+    const fetchMock = mount([RULE], [])
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Send test' }))
+
+    await waitFor(() => {
+      const urls = fetchMock.mock.calls.map((call) => String(call[0]))
+      expect(urls.some((url) => url.includes('/alert-rules/3/test/'))).toBe(true)
+    })
+  })
+})

@@ -7,6 +7,7 @@ from django.db.models import F
 from django.db.models.functions import Greatest, Least
 from django.utils import timezone
 
+from apps.alerts.rules import evaluate
 from apps.events.models import Event
 from apps.issues import detectors
 from apps.issues.fingerprint import compute
@@ -46,6 +47,7 @@ def _upsert(event: Event, fingerprint: str, components: list[str]) -> Issue:
         },
     )
     if created:
+        evaluate(issue, created=True, regressed=False)
         return issue
 
     # F() rather than read-modify-write: two workers ingesting the same issue concurrently
@@ -60,12 +62,15 @@ def _upsert(event: Event, fingerprint: str, components: list[str]) -> Issue:
     )
 
     # A resolved issue that happens again is a regression, and staying resolved would hide it.
-    if issue.status == IssueStatus.RESOLVED:
+    regressed = issue.status == IssueStatus.RESOLVED
+    if regressed:
         Issue.objects.filter(pk=issue.pk, status=IssueStatus.RESOLVED).update(
             status=IssueStatus.UNRESOLVED
         )
 
     issue.refresh_from_db()
+    # After refresh, so a frequency rule counts the event that triggered this call.
+    evaluate(issue, created=False, regressed=regressed)
     return issue
 
 
@@ -111,6 +116,7 @@ def _upsert_performance_issue(txn: Transaction, finding: "detectors.Finding") ->
         },
     )
     if created:
+        evaluate(issue, created=True, regressed=False)
         return issue
 
     Issue.objects.filter(pk=issue.pk).update(
@@ -123,10 +129,12 @@ def _upsert_performance_issue(txn: Transaction, finding: "detectors.Finding") ->
         updated_at=timezone.now(),
     )
 
-    if issue.status == IssueStatus.RESOLVED:
+    regressed = issue.status == IssueStatus.RESOLVED
+    if regressed:
         Issue.objects.filter(pk=issue.pk, status=IssueStatus.RESOLVED).update(
             status=IssueStatus.UNRESOLVED
         )
 
     issue.refresh_from_db()
+    evaluate(issue, created=False, regressed=regressed)
     return issue

@@ -95,6 +95,9 @@ env = [
     # Defaults. CI and local Postgres live at different addresses.
     "D:DJANGO_SECRET_KEY=test-key-not-used-outside-tests",
     "D:DATABASE_URL=postgres://obsly:obsly@localhost:5432/obsly",
+    # Alert delivery on the calling thread. A background thread outlives the test
+    # transaction and looks for a fire row that was rolled back before it woke up.
+    "OBSLY_ALERTS_SYNC_DELIVERY=True",
 ]
 
 [tool.coverage.run]

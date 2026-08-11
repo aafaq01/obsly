@@ -3,6 +3,7 @@ from typing import Any
 from django.conf import settings
 from rest_framework import serializers
 
+from apps.alerts.models import AlertFire, AlertRule, Trigger
 from apps.events.models import Event
 from apps.issues.models import Issue
 from apps.logs.models import LogRecord
@@ -279,4 +280,68 @@ class LogRecordSerializer(serializers.ModelSerializer[LogRecord]):
             "environment",
             "release",
             "attributes",
+        )
+
+
+class AlertRuleSerializer(serializers.ModelSerializer[AlertRule]):
+    """A rule, plus what it has actually done — a rule page that cannot tell you whether a rule
+    has ever fired is a page that hides its own misconfiguration."""
+
+    trigger_label = serializers.CharField(source="get_trigger_display", read_only=True)
+    fire_count = serializers.IntegerField(read_only=True)
+    last_fired_at = serializers.DateTimeField(read_only=True)
+
+    class Meta:
+        model = AlertRule
+        fields = (
+            "id",
+            "name",
+            "trigger",
+            "trigger_label",
+            "threshold",
+            "window_minutes",
+            "level",
+            "webhook_url",
+            "cooldown_minutes",
+            "enabled",
+            "created_at",
+            "fire_count",
+            "last_fired_at",
+        )
+
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
+        trigger = attrs.get("trigger", getattr(self.instance, "trigger", Trigger.NEW_ISSUE))
+        if trigger == Trigger.FREQUENCY:
+            # A threshold of zero fires on every event forever. Rejecting it here is cheaper
+            # than explaining the resulting pager storm.
+            if attrs.get("threshold", getattr(self.instance, "threshold", 0)) < 1:
+                raise serializers.ValidationError(
+                    {"threshold": "A frequency rule needs a threshold of at least 1."}
+                )
+            if attrs.get("window_minutes", getattr(self.instance, "window_minutes", 0)) < 1:
+                raise serializers.ValidationError(
+                    {"window_minutes": "A frequency rule needs a window of at least 1 minute."}
+                )
+        return attrs
+
+
+class AlertFireSerializer(serializers.ModelSerializer[AlertFire]):
+    rule_name = serializers.CharField(source="rule.name", read_only=True)
+    issue_title = serializers.CharField(source="issue.title", read_only=True)
+    issue_level = serializers.CharField(source="issue.level", read_only=True)
+    issue = serializers.IntegerField(source="issue_id", read_only=True)
+
+    class Meta:
+        model = AlertFire
+        fields = (
+            "id",
+            "rule_name",
+            "issue",
+            "issue_title",
+            "issue_level",
+            "reason",
+            "delivery",
+            "status_code",
+            "error",
+            "created_at",
         )
