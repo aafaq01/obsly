@@ -23,6 +23,7 @@ from apps.ingest import envelope as envelope_parser
 from apps.ingest.auth import AuthenticationError, authenticate
 from apps.ingest.logs import logs_from_payload
 from apps.ingest.normalize import event_from_payload
+from apps.ingest.scrubbing import scrub
 from apps.ingest.transactions import transaction_from_payload
 from apps.issues.grouping import assign_issues, detect_performance_issues
 from apps.logs.models import LogRecord
@@ -62,6 +63,11 @@ def envelope(request: HttpRequest, project_id: int) -> JsonResponse:
             rejected.append({"type": item.type, "reason": str(exc)})
             continue
 
+        # Before normalisation, so no unscrubbed value is ever handed to a model — including
+        # the raw payload, which is stored verbatim and would otherwise carry whatever the
+        # extracted columns dropped.
+        payload = scrub(payload) if settings.OBSLY_SCRUB_SECRETS else payload
+
         events.append(
             event_from_payload(
                 key.project,
@@ -84,6 +90,9 @@ def envelope(request: HttpRequest, project_id: int) -> JsonResponse:
             rejected.append({"type": item.type, "reason": str(exc)})
             continue
 
+        if settings.OBSLY_SCRUB_SECRETS:
+            payload = scrub(payload)
+
         built = transaction_from_payload(
             key.project, payload, now=now, envelope_event_id=parsed.headers.get("event_id")
         )
@@ -102,6 +111,12 @@ def envelope(request: HttpRequest, project_id: int) -> JsonResponse:
         except envelope_parser.EnvelopeError as exc:
             rejected.append({"type": item.type, "reason": str(exc)})
             continue
+        # Logs matter most here: they carry arbitrary logging.getLogger() output, so an
+        # application writing "auth failed for token=..." puts that token in our database and
+        # no client-side setting prevents it.
+        if settings.OBSLY_SCRUB_SECRETS:
+            payload = scrub(payload)
+
         log_records.extend(logs_from_payload(key.project, payload, now=now))
 
     stored = _store(events)
