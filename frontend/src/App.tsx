@@ -84,8 +84,15 @@ export function App() {
               <Route path="spans" element={<Queries />} />
               <Route path="logs" element={<Logs />} />
               <Route path="settings" element={<ProjectSettings />} />
+
+              {/* Detail pages live under the layout too, so opening an issue does not drop you
+                  out of the project you were in and strand you with no way back except the
+                  browser button. */}
+              <Route path="issues/:issueId" element={<IssueDetailPage />} />
+              <Route path="traces/:traceId" element={<TraceDetail />} />
             </Route>
 
+            {/* The old flat links, kept so a pasted or bookmarked URL still resolves. */}
             <Route path="/issues/:issueId" element={<IssueDetailPage />} />
             <Route path="/traces/:traceId" element={<TraceDetail />} />
             <Route path="*" element={<Navigate to="/projects" replace />} />

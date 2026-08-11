@@ -120,7 +120,7 @@ export function Dashboard() {
               <p className="logs__empty">Nothing unresolved.</p>
             ) : (
               data.top_issues.map((issue) => (
-                <Link className="mini-row" to={`/issues/${issue.id}`} key={issue.id}>
+                <Link className="mini-row" to={`/projects/${id}/issues/${issue.id}`} key={issue.id}>
                   <div className="mini-row__main">
                     <span className={`level level--${issue.level}`}>{issue.level}</span>
                     <span className="mini-row__title">{issue.title}</span>

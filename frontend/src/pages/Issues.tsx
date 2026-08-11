@@ -87,7 +87,7 @@ export function Issues() {
 
 function IssueRow({ issue }: { issue: Issue }) {
   return (
-    <Link to={`/issues/${issue.id}`} className="issue-row">
+    <Link to={`/projects/${issue.project}/issues/${issue.id}`} className="issue-row">
       <div>
         <p className="issue-row__title">{issue.title}</p>
         <div className="issue-row__meta">

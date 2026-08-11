@@ -837,11 +837,12 @@ describe('Logs', () => {
     renderLogs()
 
     expect(await screen.findByText('checkout complete for cart c-1')).toBeInTheDocument()
-    expect(screen.getByText('warning')).toBeInTheDocument()
+    expect(screen.getByText('analytics rollup on the request path')).toBeInTheDocument()
   })
 
-  it('offers level filters as "and worse", never a single level', async () => {
-    // Filtering to exactly one level hides the errors, which is never what somebody meant.
+  it('offers a toggle per level rather than a single-select', async () => {
+    // "warning and worse" and "only warnings" are different questions, and a single-select
+    // control can only ask one of them.
     mockApi({
       '/me/': { body: { authenticated: true, username: 'admin' } },
       '/projects/1/logs/': { body: RECORDS },
@@ -849,8 +850,40 @@ describe('Logs', () => {
 
     renderLogs()
 
-    const select = await screen.findByLabelText('Level')
-    expect(select).toHaveTextContent('warning and worse')
+    for (const level of ['trace', 'debug', 'info', 'warning', 'error', 'fatal']) {
+      expect(await screen.findByRole('button', { name: level })).toBeInTheDocument()
+    }
+    expect(screen.getByRole('button', { name: 'All' })).toBeInTheDocument()
+  })
+
+  it('sends only the levels that are toggled on', async () => {
+    const fetchMock = mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/1/logs/': { body: RECORDS },
+    })
+
+    renderLogs()
+    await userEvent.click(await screen.findByRole('button', { name: 'warning' }))
+
+    await waitFor(() => {
+      const urls = fetchMock.mock.calls.map((c) => String(c[0]))
+      expect(urls.some((url) => url.includes('levels=warning'))).toBe(true)
+    })
+  })
+
+  it('marks a toggled level with aria-pressed, not colour alone', async () => {
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/1/logs/': { body: RECORDS },
+    })
+
+    renderLogs('/projects/1/logs?levels=error')
+
+    expect(await screen.findByRole('button', { name: 'error' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    )
+    expect(screen.getByRole('button', { name: 'info' })).toHaveAttribute('aria-pressed', 'false')
   })
 
   it('filters to a single request when a trace is given', async () => {

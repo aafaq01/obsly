@@ -36,9 +36,12 @@ from apps.api.serializers import (
 from apps.api.timewindow import PERIODS, Window, resolve
 from apps.events.models import Event
 from apps.issues.models import Issue, IssueStatus
-from apps.logs.models import LogRecord
+from apps.logs.models import LogLevel, LogRecord
 from apps.projects.models import Organization, Project, ProjectKey
 from apps.tracing.models import SpanStatus, Transaction
+
+# Worst last. The order is the filter semantics for min_level, so it lives beside them.
+LOG_LEVEL_ORDER = ["trace", "debug", "info", "warning", "error", "fatal"]
 
 SORTS = {
     "last_seen": "-last_seen",
@@ -197,27 +200,66 @@ class LogListView(generics.ListAPIView[LogRecord]):
 
     def get_queryset(self) -> QuerySet[LogRecord]:
         get_object_or_404(Project, pk=self.kwargs["project_id"])
-        since, _ = window(self.request.query_params.get("period", "24h"))
+        win = resolve(self.request.query_params.get("period"))
 
-        logs = LogRecord.objects.filter(project_id=self.kwargs["project_id"], timestamp__gte=since)
-
-        level = self.request.query_params.get("level", "").strip()
-        if level:
-            # Levels are ordered, so "warning" means warning-and-worse. Filtering to exactly
-            # one level hides the errors, which is never what somebody meant.
-            ordered = ["trace", "debug", "info", "warning", "error", "fatal"]
-            if level in ordered:
-                logs = logs.filter(level__in=ordered[ordered.index(level) :])
-
-        query = self.request.query_params.get("q", "").strip()
-        if query:
-            logs = logs.filter(Q(body__icontains=query) | Q(logger__icontains=query))
+        logs = LogRecord.objects.filter(
+            project_id=self.kwargs["project_id"], timestamp__gte=win.since
+        )
+        logs = _filter_levels(logs, self.request)
+        logs = _search_logs(logs, self.request.query_params.get("q", ""))
 
         trace_id = self.request.query_params.get("trace_id", "").strip()
         if trace_id:
             logs = logs.filter(trace_id=trace_id)
 
+        logger_name = self.request.query_params.get("logger", "").strip()
+        if logger_name:
+            logs = logs.filter(logger=logger_name)
+
         return logs.order_by("-timestamp")[:200]
+
+
+def _filter_levels(logs: QuerySet[LogRecord], request: Request) -> QuerySet[LogRecord]:
+    """Two filters, because people mean two different things.
+
+    `levels=warning,error` is an exact set — "show me only these". `min_level=warning` is
+    level-and-worse, which is what somebody triaging means when they say "warnings and above".
+    Offering only the second makes it impossible to look at warnings without the errors
+    drowning them; offering only the first makes "everything bad" a five-click operation.
+    """
+    exact = [
+        level
+        for level in request.query_params.get("levels", "").split(",")
+        if level.strip() in LogLevel.values
+    ]
+    if exact:
+        return logs.filter(level__in=exact)
+
+    minimum = request.query_params.get("min_level", "").strip()
+    if minimum in LOG_LEVEL_ORDER:
+        return logs.filter(level__in=LOG_LEVEL_ORDER[LOG_LEVEL_ORDER.index(minimum) :])
+
+    return logs
+
+
+def _search_logs(logs: QuerySet[LogRecord], query: str) -> QuerySet[LogRecord]:
+    """Substring search over message, logger and attribute values.
+
+    icontains rather than full-text: a log line is not prose, and the thing people paste into
+    this box is an order id or a hostname, which stemming would mangle. The trigram index makes
+    the substring match an index lookup rather than the sequential scan it would otherwise be.
+    """
+    query = query.strip()
+    if not query:
+        return logs
+
+    return logs.filter(
+        Q(body__icontains=query)
+        | Q(logger__icontains=query)
+        # Attributes are JSONB; casting to text lets one search box cover the structured
+        # fields too, which is where request ids and user ids actually live.
+        | Q(attributes__icontains=query)
+    )
 
 
 class TraceListView(generics.ListAPIView[Transaction]):

@@ -7,8 +7,7 @@ import { Notice } from '../components/Notice'
 import { PeriodPicker } from '../components/PeriodPicker'
 import { handle } from '../errors'
 
-// Ordered worst-last. "warning" means warning-and-worse: filtering to exactly one level hides
-// the errors, which is never what somebody meant by it.
+// Worst last, matching the server's ordering.
 const LEVELS = ['trace', 'debug', 'info', 'warning', 'error', 'fatal']
 export function Logs() {
   const { projectId } = useParams()
@@ -17,7 +16,8 @@ export function Logs() {
   const [error, setError] = useState<string | null>(null)
 
   const id = Number(projectId)
-  const level = params.get('level') ?? ''
+  const levelsParam = params.get('levels') ?? ''
+  const selected = levelsParam.split(',').filter(Boolean)
   const period = params.get('period') ?? '24h'
   const traceId = params.get('trace_id') ?? ''
   const [query, setQuery] = useState(params.get('q') ?? '')
@@ -25,7 +25,7 @@ export function Logs() {
   useEffect(() => {
     let cancelled = false
     const search = new URLSearchParams({ period })
-    if (level) search.set('level', level)
+    if (levelsParam) search.set('levels', levelsParam)
     if (query) search.set('q', query)
     if (traceId) search.set('trace_id', traceId)
 
@@ -43,7 +43,7 @@ export function Logs() {
       cancelled = true
       clearTimeout(timer)
     }
-  }, [id, level, period, query, traceId])
+  }, [id, levelsParam, period, query, traceId])
 
   if (error) return <Notice>{error}</Notice>
 
@@ -73,19 +73,41 @@ export function Logs() {
       <div className="filters">
         <input
           type="search"
-          placeholder="Search message or logger"
+          placeholder="Search message, logger or attributes"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           aria-label="Search logs"
         />
-        <select value={level} onChange={(e) => update('level', e.target.value)} aria-label="Level">
-          <option value="">All levels</option>
-          {LEVELS.map((option) => (
-            <option key={option} value={option}>
-              {option} and worse
-            </option>
-          ))}
-        </select>
+        <PeriodPicker value={period} onChange={(next) => update('period', next)} />
+      </div>
+
+      {/* Toggles rather than a dropdown. "warning and worse" and "only warnings" are different
+          questions, and a single-select control can only ask one of them. */}
+      <div className="levelbar">
+        <button
+          className={selected.length === 0 ? 'chip chip--on' : 'chip'}
+          onClick={() => update('levels', '')}
+        >
+          All
+        </button>
+        {LEVELS.map((option) => {
+          const on = selected.includes(option)
+          return (
+            <button
+              key={option}
+              className={on ? `chip chip--on chip--${option}` : `chip chip--${option}`}
+              aria-pressed={on}
+              onClick={() =>
+                update(
+                  'levels',
+                  (on ? selected.filter((l) => l !== option) : [...selected, option]).join(','),
+                )
+              }
+            >
+              {option}
+            </button>
+          )
+        })}
         <PeriodPicker value={period} onChange={(next) => update('period', next)} />
       </div>
 
