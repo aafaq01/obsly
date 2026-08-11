@@ -11,6 +11,18 @@ from apps.events.models import Level
 from apps.projects.models import Project, TimestampedModel
 
 
+class IssueCategory(models.TextChoices):
+    ERROR = "error", "Error"
+    PERFORMANCE = "performance", "Performance"
+
+
+class IssueType(models.TextChoices):
+    """The specific pattern, for performance issues. Errors leave this blank."""
+
+    N_PLUS_ONE_QUERIES = "n_plus_one_queries", "N+1 Queries"
+    SLOW_DB_QUERY = "slow_db_query", "Slow DB Query"
+
+
 class IssueStatus(models.TextChoices):
     UNRESOLVED = "unresolved", "Unresolved"
     RESOLVED = "resolved", "Resolved"
@@ -32,6 +44,18 @@ class Issue(TimestampedModel):
     # algorithm later cannot silently re-group an organisation's entire history.
     fingerprint = models.CharField(max_length=64, db_index=True)
     fingerprint_components = models.JSONField(default=list)
+
+    # A performance issue is an Issue, not a separate table, so it inherits the whole workflow
+    # — assign, resolve, reopen on regression — instead of needing its own.
+    category = models.CharField(
+        max_length=16, choices=IssueCategory, default=IssueCategory.ERROR, db_index=True
+    )
+    issue_type = models.CharField(max_length=32, choices=IssueType, blank=True)
+
+    # What the detector found: the offending span, how many times it repeated, how much time
+    # that cost. Stored rather than recomputed, so the issue stays readable after the spans
+    # behind it have aged out.
+    evidence = models.JSONField(default=dict)
 
     title = models.CharField(max_length=512)
     culprit = models.CharField(max_length=512, blank=True)

@@ -92,6 +92,9 @@ function IssueRow({ issue }: { issue: Issue }) {
         <p className="issue-row__title">{issue.title}</p>
         <div className="issue-row__meta">
           <span className={`level level--${issue.level}`}>{issue.level}</span>
+          {issue.category === 'performance' && (
+            <span className="badge-perf">{issue.issue_type.replace(/_/g, ' ')}</span>
+          )}
           {issue.culprit && <span className="issue-row__culprit">{issue.culprit}</span>}
           <span>{relativeTime(issue.last_seen)}</span>
         </div>
