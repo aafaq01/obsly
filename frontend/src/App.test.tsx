@@ -1158,3 +1158,100 @@ describe('Instrument-panel UI', () => {
     expect(document.querySelectorAll('.skeleton__row').length).toBeGreaterThan(0)
   })
 })
+
+describe('Span detail', () => {
+  const DETAIL = {
+    op: 'db.query',
+    description: 'SELECT total FROM orders WHERE id = %s',
+    period: '24h',
+    summary: {
+      count: 150,
+      transactions: 6,
+      per_transaction: 25,
+      total_ms: 364.7,
+      p50: 2.4,
+      p95: 2.8,
+      p99: 3.1,
+      slowest: 4,
+    },
+    distribution: Array.from({ length: 20 }, (_, i) => ({
+      from_ms: i * 0.2,
+      to_ms: (i + 1) * 0.2,
+      count: i === 3 ? 120 : i === 19 ? 1 : 0,
+    })),
+    callers: [{ transaction: '/report', count: 150, total_ms: 364.7 }],
+    samples: [
+      {
+        duration_ms: 4,
+        trace_id: 'a'.repeat(32),
+        transaction_id: 'txn-uuid',
+        transaction: '/report',
+        transaction_ms: 62,
+        timestamp: new Date().toISOString(),
+      },
+    ],
+  }
+
+  function renderDetail() {
+    return render(
+      <MemoryRouter
+        initialEntries={['/projects/1/span?op=db.query&description=SELECT%20total%20FROM%20orders']}
+      >
+        <App />
+      </MemoryRouter>,
+    )
+  }
+
+  it('names the endpoints that make the span expensive', async () => {
+    // The aggregate says a query is expensive; this says who makes it expensive.
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/1/': { body: { ...PROJECT, keys: [] } },
+      '/projects/1/span/': { body: DETAIL },
+    })
+
+    renderDetail()
+
+    expect(await screen.findByText('Which endpoints call it')).toBeInTheDocument()
+    expect(screen.getAllByText('/report').length).toBeGreaterThan(0)
+  })
+
+  it('offers a trace to open, linked into the waterfall', async () => {
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/1/': { body: { ...PROJECT, keys: [] } },
+      '/projects/1/span/': { body: DETAIL },
+    })
+
+    renderDetail()
+
+    await screen.findByText('Traces to open · slowest first')
+    const links = screen.getAllByRole('link').map((a) => a.getAttribute('href'))
+    expect(links).toContain('/projects/1/traces/txn-uuid')
+  })
+
+  it('draws the distribution so the shape is visible, not just two percentiles', async () => {
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/1/': { body: { ...PROJECT, keys: [] } },
+      '/projects/1/span/': { body: DETAIL },
+    })
+
+    renderDetail()
+
+    await screen.findByText('Duration distribution')
+    expect(document.querySelectorAll('.dist__bar')).toHaveLength(20)
+  })
+
+  it('explains an empty window rather than showing a broken page', async () => {
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/1/': { body: { ...PROJECT, keys: [] } },
+      '/projects/1/span/': { status: 404, body: { detail: 'No spans matched in this period.' } },
+    })
+
+    renderDetail()
+
+    expect(await screen.findByText(/Could not load/)).toBeInTheDocument()
+  })
+})
