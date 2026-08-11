@@ -88,7 +88,7 @@ export function Traces() {
       ) : (
         <div className="card">
           {traces.map((trace) => (
-            <Link to={`/traces/${trace.id}`} className="trace-row" key={trace.id}>
+            <Link to={`/projects/${id}/traces/${trace.id}`} className="trace-row" key={trace.id}>
               <div>
                 <div className="trace-row__name">{trace.name}</div>
                 <div className="issue-row__meta">

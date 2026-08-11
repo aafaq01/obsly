@@ -9,7 +9,7 @@ import { absoluteTime } from '../time'
 import { formatMs } from '../format'
 
 export function TraceDetail() {
-  const { traceId } = useParams()
+  const { traceId, projectId } = useParams()
   const [trace, setTrace] = useState<Detail | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -54,7 +54,11 @@ export function TraceDetail() {
           <div className="card">
             {trace.errors.map((error) =>
               error.issue_id ? (
-                <Link to={`/issues/${error.issue_id}`} className="correlate-row" key={error.id}>
+                <Link
+                  to={`/projects/${projectId}/issues/${error.issue_id}`}
+                  className="correlate-row"
+                  key={error.id}
+                >
                   <span className={`level level--${error.level}`}>{error.level}</span>
                   <span className="correlate-row__title">{error.title}</span>
                   <span className="correlate-row__go">View issue →</span>

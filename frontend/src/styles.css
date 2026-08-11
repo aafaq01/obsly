@@ -1478,3 +1478,53 @@ a.mini-row:hover {
 .evidence__win {
   color: var(--status-good);
 }
+
+/* --- log level toggles ----------------------------------------------------- */
+
+/* Toggles, not a dropdown. "warning and worse" and "only warnings" are different questions,
+   and a single-select control can only ask one of them. */
+.levelbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.chip {
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 4px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--ink-muted);
+  cursor: pointer;
+}
+
+.chip:hover {
+  color: var(--ink);
+  border-color: var(--ink-muted);
+}
+
+/* Selection is carried by weight, fill and aria-pressed — never by colour alone. */
+.chip--on {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--surface);
+}
+
+.chip--warning.chip--on {
+  background: var(--status-warning);
+  border-color: var(--status-warning);
+  color: #1a1a19;
+}
+
+.chip--error.chip--on,
+.chip--fatal.chip--on {
+  background: var(--status-critical);
+  border-color: var(--status-critical);
+  color: #ffffff;
+}

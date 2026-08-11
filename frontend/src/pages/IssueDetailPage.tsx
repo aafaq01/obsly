@@ -51,7 +51,7 @@ export function IssueDetailPage() {
       </dl>
 
       {trace && (
-        <Link to={`/traces/${trace.id}`} className="correlate">
+        <Link to={`/projects/${issue.project}/traces/${trace.id}`} className="correlate">
           <span className="correlate__label">Happened inside</span>
           <code>{trace.name}</code>
           <span className="correlate__meta">

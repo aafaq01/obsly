@@ -39,6 +39,8 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    # For the trigram index that makes log substring search an index lookup.
+    "django.contrib.postgres",
     "rest_framework",
     "apps.projects",
     "apps.events",

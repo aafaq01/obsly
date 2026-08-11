@@ -147,14 +147,11 @@ class TestLogViewer:
 
         assert [row["body"] for row in rows] == ["newer", "older"]
 
-    def test_level_filter_includes_worse_levels(
-        self, staff_client: Client, project: Project, project_key: ProjectKey
-    ) -> None:
-        """Levels are ordered. Filtering to exactly one hides the errors, which nobody means."""
+    def three_levels(self, client: Client, project: Project, key: ProjectKey) -> None:
         send(
-            staff_client,
+            client,
             project,
-            project_key,
+            key,
             batch(
                 line("chatter", level="debug"),
                 line("careful", level="warning"),
@@ -162,9 +159,88 @@ class TestLogViewer:
             ),
         )
 
-        rows = json_body(staff_client.get(f"{self.url(project)}?level=warning", secure=True))
+    def test_min_level_includes_worse_levels(
+        self, staff_client: Client, project: Project, project_key: ProjectKey
+    ) -> None:
+        """What somebody triaging means by "warnings and above"."""
+        self.three_levels(staff_client, project, project_key)
+
+        rows = json_body(staff_client.get(f"{self.url(project)}?min_level=warning", secure=True))
 
         assert sorted(row["body"] for row in rows) == ["broken", "careful"]
+
+    def test_an_exact_level_shows_only_that_level(
+        self, staff_client: Client, project: Project, project_key: ProjectKey
+    ) -> None:
+        """Without this, looking at warnings alone is impossible — the errors drown them."""
+        self.three_levels(staff_client, project, project_key)
+
+        rows = json_body(staff_client.get(f"{self.url(project)}?levels=warning", secure=True))
+
+        assert [row["body"] for row in rows] == ["careful"]
+
+    def test_several_exact_levels_can_be_combined(
+        self, staff_client: Client, project: Project, project_key: ProjectKey
+    ) -> None:
+        self.three_levels(staff_client, project, project_key)
+
+        rows = json_body(staff_client.get(f"{self.url(project)}?levels=debug,error", secure=True))
+
+        assert sorted(row["body"] for row in rows) == ["broken", "chatter"]
+
+    def test_an_exact_level_beats_a_minimum_when_both_are_given(
+        self, staff_client: Client, project: Project, project_key: ProjectKey
+    ) -> None:
+        """The more specific instruction wins; silently ANDing them returns nothing and looks
+        like a broken filter."""
+        self.three_levels(staff_client, project, project_key)
+
+        rows = json_body(
+            staff_client.get(f"{self.url(project)}?levels=debug&min_level=error", secure=True)
+        )
+
+        assert [row["body"] for row in rows] == ["chatter"]
+
+    def test_an_unknown_level_is_ignored_rather_than_returning_nothing(
+        self, staff_client: Client, project: Project, project_key: ProjectKey
+    ) -> None:
+        self.three_levels(staff_client, project, project_key)
+
+        rows = json_body(staff_client.get(f"{self.url(project)}?levels=banana", secure=True))
+
+        assert len(rows) == 3
+
+    def test_search_matches_attribute_values(
+        self, staff_client: Client, project: Project, project_key: ProjectKey
+    ) -> None:
+        """Request ids and user ids live in attributes, and one search box should cover them."""
+        send(
+            staff_client,
+            project,
+            project_key,
+            batch(
+                line("processed", attributes={"order_id": "ord-9182"}),
+                line("processed", attributes={"order_id": "ord-0001"}),
+            ),
+        )
+
+        rows = json_body(staff_client.get(f"{self.url(project)}?q=ord-9182", secure=True))
+
+        assert len(rows) == 1
+
+    def test_filters_by_logger_name(
+        self, staff_client: Client, project: Project, project_key: ProjectKey
+    ) -> None:
+        send(
+            staff_client,
+            project,
+            project_key,
+            batch(line("a", logger="app.billing"), line("b", logger="app.cache")),
+        )
+
+        rows = json_body(staff_client.get(f"{self.url(project)}?logger=app.cache", secure=True))
+
+        assert [row["body"] for row in rows] == ["b"]
 
     def test_search_matches_body_and_logger(
         self, staff_client: Client, project: Project, project_key: ProjectKey

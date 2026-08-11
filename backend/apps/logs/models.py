@@ -7,6 +7,7 @@ on the two things anyone filters by, and no per-row overhead that is not earned.
 
 import uuid
 
+from django.contrib.postgres.indexes import GinIndex
 from django.db import models
 
 from apps.projects.models import Project
@@ -50,6 +51,12 @@ class LogRecord(models.Model):
             models.Index(fields=["project", "-timestamp"], name="log_project_recent"),
             # And the correlated one: every line from a single request.
             models.Index(fields=["trace_id", "timestamp"], name="log_trace_order"),
+            # Substring search. Without these, `body__icontains` is a sequential scan over
+            # every row in the window — the query that stops working first on a table that
+            # grows by a row per log line, and it stops working exactly when somebody is
+            # searching it during an incident.
+            GinIndex(fields=["body"], name="log_body_trgm", opclasses=["gin_trgm_ops"]),
+            GinIndex(fields=["logger"], name="log_logger_trgm", opclasses=["gin_trgm_ops"]),
         ]
 
     def __str__(self) -> str:
