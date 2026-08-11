@@ -1145,7 +1145,7 @@ describe('Instrument-panel UI', () => {
     mockApi({
       '/me/': { body: { authenticated: true, username: 'admin' } },
       '/projects/1/': { body: { ...PROJECT, keys: [] } },
-      '/projects/1/issues/': { body: new Promise(() => {}) as never },
+      '/projects/1/issues/': { body: new Promise(() => {}) },
     })
 
     render(
