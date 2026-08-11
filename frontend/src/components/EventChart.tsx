@@ -1,6 +1,7 @@
 import { useState } from 'react'
 
 import { agoLabel, bucketLabel, humanSpan } from '../format'
+import { bucketTime, clockLabel } from '../time'
 
 interface Props {
   /** One count per bucket, oldest first. */
@@ -10,6 +11,11 @@ interface Props {
   /** What one bucket covers, for the axis and the table view. */
   bucketSeconds?: number
   unit?: string
+  /** ISO time of the first bucket. With it the axis reads in clock time; without it the
+   *  chart falls back to relative ages, which is all it could say before. */
+  startedAt?: string
+  /** What the chart measures, stated rather than left to be inferred from context. */
+  caption?: string
 }
 
 /**
@@ -28,6 +34,8 @@ export function EventChart({
   compact = false,
   bucketSeconds = 3600,
   unit = 'events',
+  startedAt,
+  caption,
 }: Props) {
   const [hover, setHover] = useState<number | null>(null)
   const [showTable, setShowTable] = useState(false)
@@ -35,6 +43,11 @@ export function EventChart({
   const max = Math.max(...hourly, 1)
   const total = hourly.reduce((sum, value) => sum + value, 0)
   const spanSeconds = hourly.length * bucketSeconds
+  const at = (index: number) => bucketTime(startedAt, index, bucketSeconds)
+  const stamp = (index: number) => {
+    const moment = at(index)
+    return moment ? clockLabel(moment, bucketSeconds) : null
+  }
 
   const bars = (
     <div
@@ -75,7 +88,13 @@ export function EventChart({
         ) : (
           <>
             <strong>{hourly[hover]?.toLocaleString()}</strong> {unit} ·{' '}
-            {agoLabel((hourly.length - 1 - hover) * bucketSeconds)}
+            {stamp(hover) ?? agoLabel((hourly.length - 1 - hover) * bucketSeconds)}
+            {stamp(hover) && (
+              <span className="chart2__ago">
+                {' '}
+                · {agoLabel((hourly.length - 1 - hover) * bucketSeconds)}
+              </span>
+            )}
           </>
         )}
       </figcaption>
@@ -86,10 +105,15 @@ export function EventChart({
       </div>
 
       <div className="chart2__xaxis">
-        <span>{humanSpan(spanSeconds)} ago</span>
-        <span>{humanSpan(Math.round(spanSeconds / 2))} ago</span>
-        <span>now</span>
+        <span>{stamp(0) ?? `${humanSpan(spanSeconds)} ago`}</span>
+        <span>
+          {stamp(Math.floor((hourly.length - 1) / 2)) ??
+            `${humanSpan(Math.round(spanSeconds / 2))} ago`}
+        </span>
+        <span>{stamp(hourly.length - 1) ?? 'now'}</span>
       </div>
+
+      {caption && <p className="chart2__caption">{caption}</p>}
 
       <button className="chart2__toggle" onClick={() => setShowTable(!showTable)}>
         {showTable ? 'Hide values' : 'Show values as a table'}
@@ -110,7 +134,15 @@ export function EventChart({
               .reverse()
               .map(({ count, index }) => (
                 <tr key={index}>
-                  <td>{agoLabel((hourly.length - 1 - index) * bucketSeconds)}</td>
+                  <td>
+                    {stamp(index) ?? agoLabel((hourly.length - 1 - index) * bucketSeconds)}
+                    {stamp(index) && (
+                      <em className="chart2__ago">
+                        {' '}
+                        {agoLabel((hourly.length - 1 - index) * bucketSeconds)}
+                      </em>
+                    )}
+                  </td>
                   <td className="num">{count.toLocaleString()}</td>
                 </tr>
               ))}

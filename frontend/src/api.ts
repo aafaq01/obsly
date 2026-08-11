@@ -131,6 +131,9 @@ export interface Dashboard {
   period: string
   buckets: number
   bucket_seconds: number
+  /** ISO time of the first bucket. Every other point is this plus n × bucket_seconds — one
+   *  timestamp instead of one per point, saying the same thing. */
+  series_start: string
   headline: {
     transactions: number
     throughput_per_minute: number
@@ -180,6 +183,7 @@ export interface Performance {
     failure_rate: number
     series: number[]
     bucket_seconds: number
+    series_start: string
   }
 }
 
@@ -279,7 +283,13 @@ export interface TagValue {
 }
 
 export interface IssueDetail {
-  issue: Issue & { fingerprint: string; fingerprint_components: string[] }
+  issue: Issue & {
+    fingerprint: string
+    fingerprint_components: string[]
+    /** Detail only — the stream draws the same counts without an axis to label. */
+    hourly_start: string
+    bucket_seconds: number
+  }
   latest_event: ObslyEvent | null
   tags: Record<string, TagValue[]>
   /** The request this error happened inside, when both were recorded. */

@@ -170,6 +170,10 @@ def _frames(entry: dict[str, Any]) -> list[dict[str, Any]]:
 
 class IssueDetailSerializer(IssueSerializer):
     fingerprint_components = serializers.ListField(child=serializers.CharField(), read_only=True)
+    # Only on the detail page. The stream draws the same counts without an axis, so a timestamp
+    # per row would be a hundred copies of a string nothing reads.
+    hourly_start = serializers.DateTimeField(read_only=True)
+    bucket_seconds = serializers.IntegerField(read_only=True)
 
     class Meta(IssueSerializer.Meta):
         # Spelled out rather than spread from the parent: a subclass widening an inherited
@@ -185,6 +189,8 @@ class IssueDetailSerializer(IssueSerializer):
             "first_seen",
             "last_seen",
             "hourly",
+            "hourly_start",
+            "bucket_seconds",
             "fingerprint",
             "fingerprint_components",
         )

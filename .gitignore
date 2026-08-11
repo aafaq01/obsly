@@ -33,3 +33,6 @@ coverage/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Knowledge graph build output — regenerable, and graph.json alone is 1.8MB.
+graphify-out/

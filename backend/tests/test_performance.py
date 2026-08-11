@@ -153,6 +153,20 @@ class TestPercentiles:
         assert sum(payload["series"]) == 3
         assert payload["bucket_seconds"] == 3600
 
+    def test_the_series_says_when_it_starts(self, staff_client: Client, project: Project) -> None:
+        """A chart axis reading "3h ago" cannot be lined up against a deploy or an alert. With
+        the first bucket's timestamp and the bucket width, every point has a clock time — and
+        that is two fields rather than one timestamp per point saying the same thing."""
+        make(project, "/api", [10.0])
+
+        payload = summary(staff_client, project)["summary"]
+
+        start = datetime.fromisoformat(payload["series_start"])
+        # The last bucket must land at roughly now, or the axis is labelled with times the
+        # data does not sit at.
+        last = start + timedelta(seconds=payload["bucket_seconds"] * (len(payload["series"]) - 1))
+        assert abs((NOW - last).total_seconds()) <= payload["bucket_seconds"]
+
     def test_a_short_window_buckets_by_minute(self, staff_client: Client, project: Project) -> None:
         """An hour bucketed hourly is one bar, which says nothing."""
         make(project, "/api", [10.0] * 3, minutes_ago=2)

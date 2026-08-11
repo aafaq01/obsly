@@ -86,15 +86,26 @@ export function Dashboard() {
           invents a correlation that is not in the data. */}
       <div className="charts">
         <Chart title={`Requests per ${bucketLabel(data.bucket_seconds)}`}>
-          <Sparkline values={series.throughput} bucketSeconds={data.bucket_seconds} unit=" req" />
+          <Sparkline
+            values={series.throughput}
+            bucketSeconds={data.bucket_seconds}
+            startedAt={data.series_start}
+            unit=" req"
+          />
         </Chart>
         <Chart title={`p95 latency per ${bucketLabel(data.bucket_seconds)}`}>
-          <Sparkline values={series.p95} bucketSeconds={data.bucket_seconds} format={formatMs} />
+          <Sparkline
+            values={series.p95}
+            bucketSeconds={data.bucket_seconds}
+            startedAt={data.series_start}
+            format={formatMs}
+          />
         </Chart>
         <Chart title={`Failed requests per ${bucketLabel(data.bucket_seconds)}`}>
           <Sparkline
             values={series.failures}
             bucketSeconds={data.bucket_seconds}
+            startedAt={data.series_start}
             unit=" failed"
             tone="critical"
           />
@@ -103,12 +114,18 @@ export function Dashboard() {
           <Sparkline
             values={series.errors}
             bucketSeconds={data.bucket_seconds}
+            startedAt={data.series_start}
             unit=" errors"
             tone="critical"
           />
         </Chart>
         <Chart title={`Log records per ${bucketLabel(data.bucket_seconds)}`}>
-          <Sparkline values={series.logs} bucketSeconds={data.bucket_seconds} unit=" logs" />
+          <Sparkline
+            values={series.logs}
+            bucketSeconds={data.bucket_seconds}
+            startedAt={data.series_start}
+            unit=" logs"
+          />
         </Chart>
       </div>
 

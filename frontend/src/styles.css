@@ -1831,3 +1831,21 @@ a.rank__row:hover .rank__name {
   background: var(--baseline);
   border-radius: 0;
 }
+
+/* The age beside a clock time: the timestamp says when, this says how long ago. Secondary,
+   because the absolute time is the one you compare against a deploy or an alert. */
+.chart2__ago {
+  color: var(--text-dim);
+  font-style: normal;
+  font-weight: 400;
+}
+
+/* What the chart measures, in a sentence. A chart whose meaning has to be inferred from the
+   heading above it is a chart people read wrong. */
+.chart2__caption {
+  margin: 10px 0 0;
+  color: var(--text-dim);
+  font-size: 12px;
+  line-height: 1.5;
+  max-width: 68ch;
+}
