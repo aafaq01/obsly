@@ -61,6 +61,34 @@ export function IssueDetailPage() {
         </Link>
       )}
 
+      {issue.category === 'performance' && 'description' in issue.evidence && (
+        <div className="evidence">
+          <h2 className="section__title">What the detector found</h2>
+          <div className="card card--tight">
+            <code className="evidence__query">{issue.evidence.description}</code>
+            <dl className="evidence__stats">
+              <div>
+                <dt>Repeats per request</dt>
+                <dd>{issue.evidence.repeat_count}</dd>
+              </div>
+              <div>
+                <dt>Total time</dt>
+                <dd>{Math.round(issue.evidence.total_ms)}ms</dd>
+              </div>
+              <div>
+                {/* One of those queries is legitimate; the rest are the bug. */}
+                <dt>Recoverable</dt>
+                <dd className="evidence__win">{Math.round(issue.evidence.wasted_ms)}ms</dd>
+              </div>
+              <div>
+                <dt>Endpoint</dt>
+                <dd>{issue.evidence.transaction}</dd>
+              </div>
+            </dl>
+          </div>
+        </div>
+      )}
+
       <div className="issue-grid">
         <div className="issue-grid__main">
           <section>

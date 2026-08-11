@@ -24,7 +24,7 @@ from apps.ingest.auth import AuthenticationError, authenticate
 from apps.ingest.logs import logs_from_payload
 from apps.ingest.normalize import event_from_payload
 from apps.ingest.transactions import transaction_from_payload
-from apps.issues.grouping import assign_issues
+from apps.issues.grouping import assign_issues, detect_performance_issues
 from apps.logs.models import LogRecord
 from apps.tracing.models import Span, Transaction
 
@@ -107,6 +107,13 @@ def envelope(request: HttpRequest, project_id: int) -> JsonResponse:
     stored = _store(events)
     stored_transactions = _store_transactions(transactions, spans)
     stored_logs = _store_logs(log_records)
+
+    try:
+        detect_performance_issues(stored_transactions, spans)
+    except Exception:
+        # Same posture as grouping: the transaction is already stored, and a detector that
+        # cannot run costs an insight rather than a measurement.
+        logger.exception("ingest: performance detection failed for project %s", project_id)
 
     try:
         assign_issues(stored)

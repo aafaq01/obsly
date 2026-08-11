@@ -98,6 +98,9 @@ class IssueSerializer(serializers.ModelSerializer[Issue]):
             "first_seen",
             "last_seen",
             "hourly",
+            "category",
+            "issue_type",
+            "evidence",
         )
 
 

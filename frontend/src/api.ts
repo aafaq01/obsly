@@ -26,6 +26,16 @@ export interface ProjectDetail extends Project {
   keys: ProjectKey[]
 }
 
+export interface PerformanceEvidence {
+  description: string
+  op: string
+  repeat_count: number
+  total_ms: number
+  wasted_ms: number
+  transaction: string
+  trace_id: string
+}
+
 export interface Issue {
   id: number
   project: number
@@ -37,6 +47,9 @@ export interface Issue {
   first_seen: string
   last_seen: string
   hourly: number[]
+  category: 'error' | 'performance'
+  issue_type: string
+  evidence: PerformanceEvidence | Record<string, never>
 }
 
 export interface SpanStats {

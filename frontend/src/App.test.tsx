@@ -55,6 +55,9 @@ const ISSUE = {
   first_seen: new Date(Date.now() - 7200_000).toISOString(),
   last_seen: new Date(Date.now() - 120_000).toISOString(),
   hourly: [0, 0, 3, 7, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 12],
+  category: 'error' as const,
+  issue_type: '',
+  evidence: {},
 }
 
 function renderApp() {
@@ -976,5 +979,68 @@ describe('Navigation', () => {
     )
 
     expect(await screen.findByRole('heading', { name: 'Overview' })).toBeInTheDocument()
+  })
+})
+
+describe('Performance issues', () => {
+  const PERF_ISSUE = {
+    ...ISSUE,
+    id: 11,
+    title: 'N+1 Queries: SELECT total FROM orders WHERE id = %s',
+    culprit: '/report',
+    level: 'warning',
+    category: 'performance' as const,
+    issue_type: 'n_plus_one_queries',
+    evidence: {
+      description: 'SELECT total FROM orders WHERE id = %s',
+      op: 'db.query',
+      repeat_count: 25,
+      total_ms: 250,
+      wasted_ms: 240,
+      transaction: '/report',
+      trace_id: 'a'.repeat(32),
+    },
+  }
+
+  it('marks a performance issue in the stream', async () => {
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/1/': { body: { ...PROJECT, keys: [] } },
+      '/projects/1/issues/': { body: [PERF_ISSUE] },
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/projects/1/issues']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('n plus one queries')).toBeInTheDocument()
+  })
+
+  it('shows what the detector found instead of an empty stack trace', async () => {
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/issues/11/': {
+        body: {
+          issue: { ...PERF_ISSUE, fingerprint: 'f', fingerprint_components: [] },
+          latest_event: null,
+          tags: {},
+          trace: null,
+        },
+      },
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/issues/11']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('What the detector found')).toBeInTheDocument()
+    expect(screen.getByText('SELECT total FROM orders WHERE id = %s')).toBeInTheDocument()
+    expect(screen.getByText('25')).toBeInTheDocument()
+    // The number that says whether fixing this is worth an afternoon.
+    expect(screen.getByText('240ms')).toBeInTheDocument()
   })
 })
