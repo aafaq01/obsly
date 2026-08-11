@@ -60,7 +60,7 @@ export function Projects() {
             >
               <div>
                 <p className="issue-row__title">
-                  <Link to={`/projects/${project.id}/issues`}>{project.name}</Link>
+                  <Link to={`/projects/${project.id}/dashboard`}>{project.name}</Link>
                 </p>
                 <div className="issue-row__meta">
                   <span>{project.organization}</span>

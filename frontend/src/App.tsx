@@ -2,19 +2,19 @@ import { useEffect, useState } from 'react'
 import { Link, Navigate, Route, Routes } from 'react-router-dom'
 
 import { api } from './api'
-import { IssueDetailPage } from './pages/IssueDetailPage'
 import { Notice } from './components/Notice'
-import { ProjectNav } from './components/ProjectNav'
-import { Issues } from './pages/Issues'
+import { ProjectLayout } from './components/ProjectLayout'
 import { Dashboard } from './pages/Dashboard'
+import { IssueDetailPage } from './pages/IssueDetailPage'
+import { Issues } from './pages/Issues'
 import { Login } from './pages/Login'
-import { Queries } from './pages/Queries'
 import { Logs } from './pages/Logs'
 import { Performance } from './pages/Performance'
-import { TraceDetail } from './pages/TraceDetail'
-import { Traces } from './pages/Traces'
 import { ProjectSettings } from './pages/ProjectSettings'
 import { Projects } from './pages/Projects'
+import { Queries } from './pages/Queries'
+import { TraceDetail } from './pages/TraceDetail'
+import { Traces } from './pages/Traces'
 
 type Auth = { state: 'loading' } | { state: 'in'; username: string } | { state: 'out' }
 
@@ -37,7 +37,7 @@ export function App() {
   return (
     <div className="app">
       <header className="topbar">
-        <Link to="/" className="topbar__brand">
+        <Link to="/projects" className="topbar__brand">
           Obsly
         </Link>
         {auth.state === 'in' && (
@@ -66,22 +66,29 @@ export function App() {
           <Login onSignedIn={(username) => setAuth({ state: 'in', username })} />
         )}
 
-        {auth.state === 'in' && <ProjectNav />}
-
         {auth.state === 'in' && (
           <Routes>
-            <Route path="/" element={<Issues />} />
-            <Route path="/projects/:projectId/issues" element={<Issues />} />
-            <Route path="/issues/:issueId" element={<IssueDetailPage />} />
+            {/* The project list, not a project. Landing on whichever project sorts first is
+                arbitrary, and it reads as a bug the moment you have more than one. */}
+            <Route path="/" element={<Navigate to="/projects" replace />} />
             <Route path="/projects" element={<Projects />} />
-            <Route path="/projects/:projectId/performance" element={<Performance />} />
-            <Route path="/projects/:projectId/traces" element={<Traces />} />
-            <Route path="/projects/:projectId/logs" element={<Logs />} />
-            <Route path="/projects/:projectId/dashboard" element={<Dashboard />} />
-            <Route path="/projects/:projectId/spans" element={<Queries />} />
+
+            {/* A layout route, so the tab bar sits inside a matched route and can read
+                :projectId. Every project page renders under it and inherits the tabs. */}
+            <Route path="/projects/:projectId" element={<ProjectLayout />}>
+              <Route index element={<Navigate to="dashboard" replace />} />
+              <Route path="dashboard" element={<Dashboard />} />
+              <Route path="issues" element={<Issues />} />
+              <Route path="performance" element={<Performance />} />
+              <Route path="traces" element={<Traces />} />
+              <Route path="spans" element={<Queries />} />
+              <Route path="logs" element={<Logs />} />
+              <Route path="settings" element={<ProjectSettings />} />
+            </Route>
+
+            <Route path="/issues/:issueId" element={<IssueDetailPage />} />
             <Route path="/traces/:traceId" element={<TraceDetail />} />
-            <Route path="/projects/:projectId/settings" element={<ProjectSettings />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
+            <Route path="*" element={<Navigate to="/projects" replace />} />
           </Routes>
         )}
       </main>
