@@ -1,5 +1,6 @@
 import json
 import logging
+from collections.abc import Iterator
 from typing import Any
 
 import pytest
@@ -615,3 +616,118 @@ class TestLogFlusher:
     ) -> None:
         assert Client(DSN, transport=transport)._flusher is None  # type: ignore[arg-type]
         assert Client(DSN, transport=transport, enable_logs=True)._flusher is not None  # type: ignore[arg-type]
+
+
+class TestSqlalchemyIntegration:
+    """Automatic database spans — the point being that the application adds no span calls."""
+
+    @pytest.fixture
+    def engine(self) -> Iterator[Any]:
+        from sqlalchemy import create_engine, text
+
+        import obsly.integrations.sqlalchemy as integration
+
+        integration._instrumented = False
+        assert integration.instrument() is True
+
+        created = create_engine("sqlite://")
+        with created.begin() as conn:
+            conn.execute(text("CREATE TABLE users (id INTEGER, email TEXT)"))
+            conn.execute(text("INSERT INTO users VALUES (1, 'a@example.com')"))
+
+        yield created, text
+
+        # Disposed explicitly: left to the garbage collector, sqlite finalises its connections
+        # at an arbitrary later moment and pytest reports it as an unraisable exception.
+        created.dispose()
+
+    def spans(self, transport: FakeTransport) -> list[dict[str, Any]]:
+        for event in transport.events():
+            if event.get("type") == "transaction":
+                return event["spans"]
+        return []
+
+    def test_a_query_becomes_a_span_without_any_application_change(
+        self, transport: FakeTransport, engine: Any
+    ) -> None:
+        engine, text = engine
+        client = Client(DSN, transport=transport, traces_sample_rate=1.0)  # type: ignore[arg-type]
+
+        with client.start_transaction("/users", "http.server"), engine.connect() as conn:
+            conn.execute(text("SELECT email FROM users WHERE id = :id"), {"id": 1})
+
+        [span] = [s for s in self.spans(transport) if s["op"] == "db.query"]
+        assert "SELECT email FROM users" in span["description"]
+        assert span["data"]["db.system"] == "sqlite"
+
+    def test_parameter_values_are_never_captured(
+        self, transport: FakeTransport, engine: Any
+    ) -> None:
+        """Bind values are the row itself, which is where the personal data lives."""
+        engine, text = engine
+        client = Client(DSN, transport=transport, traces_sample_rate=1.0)  # type: ignore[arg-type]
+
+        with client.start_transaction("/users", "http.server"), engine.connect() as conn:
+            conn.execute(
+                text("SELECT id FROM users WHERE email = :email"),
+                {"email": "secret@example.com"},
+            )
+
+        assert "secret@example.com" not in json.dumps(self.spans(transport))
+
+    def test_statements_are_collapsed_to_one_line(
+        self, transport: FakeTransport, engine: Any
+    ) -> None:
+        """A multi-line ORM SELECT is unreadable in a waterfall row, and the indentation is
+        not what identifies the query."""
+        engine, text = engine
+        client = Client(DSN, transport=transport, traces_sample_rate=1.0)  # type: ignore[arg-type]
+
+        with client.start_transaction("/users", "http.server"), engine.connect() as conn:
+            conn.execute(text("SELECT\n   email\nFROM users\nWHERE id = 1"))
+
+        [span] = [s for s in self.spans(transport) if "email" in s["description"]]
+        assert "\n" not in span["description"]
+
+    def test_a_failing_query_still_produces_a_span(
+        self, transport: FakeTransport, engine: Any
+    ) -> None:
+        """A failed query still took time, and its span is the only record of how long."""
+        engine, text = engine
+        client = Client(DSN, transport=transport, traces_sample_rate=1.0)  # type: ignore[arg-type]
+
+        with (
+            client.start_transaction("/users", "http.server"),
+            engine.connect() as conn,
+            pytest.raises(Exception, match="no such table"),
+        ):
+            conn.execute(text("SELECT * FROM table_that_does_not_exist"))
+
+        assert [s for s in self.spans(transport) if "does_not_exist" in s["description"]]
+
+    def test_queries_outside_a_transaction_are_ignored(
+        self, transport: FakeTransport, engine: Any
+    ) -> None:
+        """Instrumentation in a library must not depend on the app enabling tracing."""
+        engine, text = engine
+        obsly.client._client = Client(DSN, transport=transport)  # type: ignore[arg-type]
+
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+
+        assert transport.sent == []
+
+    def test_instrumenting_twice_does_not_double_count(
+        self, transport: FakeTransport, engine: Any
+    ) -> None:
+        """A framework and an application both calling instrument() is normal."""
+        engine, text = engine
+        import obsly.integrations.sqlalchemy as integration
+
+        integration.instrument()
+        client = Client(DSN, transport=transport, traces_sample_rate=1.0)  # type: ignore[arg-type]
+
+        with client.start_transaction("/users", "http.server"), engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+
+        assert len([s for s in self.spans(transport) if s["op"] == "db.query"]) == 1

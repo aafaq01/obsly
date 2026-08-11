@@ -12,6 +12,8 @@ dev = [
     "mypy>=1.14",
     "fastapi>=0.115",
     "httpx2>=0.1",
+    # Exercised by the optional integration test, never a runtime dependency.
+    "sqlalchemy>=2.0",
 ]
 
 [build-system]
@@ -33,6 +35,12 @@ ignore = ["S101"]
 python_version = "3.11"
 strict = true
 warn_unreachable = true
+
+# SQLAlchemy is an optional integration, not a dependency. The SDK must type-check on a
+# machine that does not have it.
+[[tool.mypy.overrides]]
+module = "sqlalchemy.*"
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
