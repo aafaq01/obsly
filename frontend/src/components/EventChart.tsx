@@ -43,11 +43,11 @@ export function EventChart({
   const max = Math.max(...hourly, 1)
   const total = hourly.reduce((sum, value) => sum + value, 0)
   const spanSeconds = hourly.length * bucketSeconds
-  const at = (index: number) => bucketTime(startedAt, index, bucketSeconds)
   const stamp = (index: number) => {
-    const moment = at(index)
+    const moment = bucketTime(startedAt, index, bucketSeconds)
     return moment ? clockLabel(moment, bucketSeconds) : null
   }
+  const ago = (index: number) => agoLabel((hourly.length - 1 - index) * bucketSeconds)
 
   const bars = (
     <div
@@ -87,14 +87,8 @@ export function EventChart({
           </>
         ) : (
           <>
-            <strong>{hourly[hover]?.toLocaleString()}</strong> {unit} ·{' '}
-            {stamp(hover) ?? agoLabel((hourly.length - 1 - hover) * bucketSeconds)}
-            {stamp(hover) && (
-              <span className="chart2__ago">
-                {' '}
-                · {agoLabel((hourly.length - 1 - hover) * bucketSeconds)}
-              </span>
-            )}
+            <strong>{hourly[hover]?.toLocaleString()}</strong> {unit} · {stamp(hover) ?? ago(hover)}
+            {stamp(hover) && <span className="chart2__ago"> · {ago(hover)}</span>}
           </>
         )}
       </figcaption>
@@ -135,13 +129,8 @@ export function EventChart({
               .map(({ count, index }) => (
                 <tr key={index}>
                   <td>
-                    {stamp(index) ?? agoLabel((hourly.length - 1 - index) * bucketSeconds)}
-                    {stamp(index) && (
-                      <em className="chart2__ago">
-                        {' '}
-                        {agoLabel((hourly.length - 1 - index) * bucketSeconds)}
-                      </em>
-                    )}
+                    {stamp(index) ?? ago(index)}
+                    {stamp(index) && <em className="chart2__ago"> {ago(index)}</em>}
                   </td>
                   <td className="num">{count.toLocaleString()}</td>
                 </tr>
