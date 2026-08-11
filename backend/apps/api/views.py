@@ -10,14 +10,17 @@ from collections import defaultdict
 from datetime import datetime
 from typing import Any
 
-from django.db.models import Count, Q, QuerySet
+from django.db.models import Count, Max, Q, QuerySet
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from rest_framework import generics, status
 from rest_framework.request import Request
 from rest_framework.response import Response
+from rest_framework.serializers import BaseSerializer
 from rest_framework.views import APIView
 
+from apps.alerts.delivery import send_now
+from apps.alerts.models import AlertFire, AlertRule
 from apps.api.dashboard import overview
 from apps.api.performance import (
     endpoint_detail,
@@ -28,6 +31,8 @@ from apps.api.performance import (
     window,
 )
 from apps.api.serializers import (
+    AlertFireSerializer,
+    AlertRuleSerializer,
     CorrelatedErrorSerializer,
     EventSerializer,
     IssueDetailSerializer,
@@ -536,3 +541,70 @@ def _tag_distribution(issue: Issue, limit: int = 5) -> dict[str, list[dict[str, 
         ]
         for key, values in tallies.items()
     }
+
+
+class AlertRuleListView(generics.ListCreateAPIView[AlertRule]):
+    """Rules for one project."""
+
+    serializer_class = AlertRuleSerializer
+
+    def get_queryset(self) -> QuerySet[AlertRule]:
+        return _annotated_rules().filter(project_id=self.kwargs["project_id"])
+
+    def perform_create(self, serializer: BaseSerializer[AlertRule]) -> None:
+        project = get_object_or_404(Project, pk=self.kwargs["project_id"])
+        serializer.save(project=project)
+
+
+class AlertRuleDetailView(generics.RetrieveUpdateDestroyAPIView[AlertRule]):
+    serializer_class = AlertRuleSerializer
+
+    def get_queryset(self) -> QuerySet[AlertRule]:
+        return _annotated_rules()
+
+
+def _annotated_rules() -> QuerySet[AlertRule]:
+    # Counted in the query rather than per row in the serializer: the rules page is small, but
+    # a count() per rule is the N+1 this project files issues about.
+    return AlertRule.objects.annotate(
+        fire_count=Count("fires"), last_fired_at=Max("fires__created_at")
+    ).order_by("-created_at")
+
+
+class AlertFireListView(generics.ListAPIView[AlertFire]):
+    """What actually fired, newest first — the feed that answers "were we told?"."""
+
+    serializer_class = AlertFireSerializer
+
+    def get_queryset(self) -> QuerySet[AlertFire]:
+        return (
+            AlertFire.objects.filter(rule__project_id=self.kwargs["project_id"])
+            .select_related("rule", "issue")
+            .order_by("-created_at")[:100]
+        )
+
+
+class AlertRuleTestView(APIView):
+    """Send a rule's webhook a real notification, now.
+
+    A webhook you cannot test is one you find out is broken during the incident it was supposed
+    to warn you about. Uses the project's most recent issue so the payload is the real shape,
+    not a fabricated example.
+    """
+
+    def post(self, request: Request, pk: int) -> Response:
+        rule = get_object_or_404(AlertRule, pk=pk)
+        issue = Issue.objects.filter(project_id=rule.project_id).order_by("-last_seen").first()
+        if issue is None:
+            return Response(
+                {"detail": "This project has no issues yet, so there is nothing to send."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        fire = AlertFire.objects.create(
+            rule=rule, issue=issue, reason=f"Test of “{rule.name}” — not a real trigger"
+        )
+        # Synchronously, because the whole point is to report what happened.
+        send_now(fire)
+        fire.refresh_from_db()
+        return Response(AlertFireSerializer(fire).data, status=status.HTTP_201_CREATED)

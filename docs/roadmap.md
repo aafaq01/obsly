@@ -24,6 +24,17 @@ linters and type checks are green in CI.
 | 15 | `feat/logs` | Structured logs, stdlib `logging` bridge, log viewer |
 | 16 | `feat/db-spans` | Automatic SQLAlchemy query spans |
 | 17 | `feat/span-insights` | Aggregate span view, project dashboard |
+| 18 | `fix/navigation` | Project tabs reachable; `/` stops opening an arbitrary project |
+| 19 | `feat/perf-detectors` | N+1, slow query and consecutive-query detection, promoted into Issues |
+| 20 | `feat/time-ranges` | Minute- and second-resolution windows, one picker everywhere |
+| 21 | `feat/log-search` | Level filters and indexed search across log bodies |
+| 22 | `feat/instrument-ui` | Monospace for measured values; the instrument-panel direction |
+| 23 | `feat/span-detail` | One span group: distribution, callers, traces to open |
+| 24 | `fix/navigation-depth` | Breadcrumbs, trace back links, project switcher, rank charts |
+| 25 | `feat/pii-scrubbing` | Server-side secret redaction, deny by default, before the write |
+| 26 | `feat/endpoint-detail` | Clickable endpoints: where one endpoint's time actually goes |
+| 27 | `feat/chart-timestamps` | Charts read in clock time and say what they measure |
+| 28 | `feat/alerts` | New-issue, regression and frequency rules with webhook delivery |
 
 ## Planned
 
@@ -32,14 +43,11 @@ already run into.
 
 | Branch | Delivers | Why it matters |
 |---|---|---|
-| `feat/perf-detectors` | N+1, slow query and consecutive-query detection **promoted into Issues** | The Spans page already shows `25.0 calls/req` on a query. A human still has to notice it. A detector opens an issue with the offending query, repeat count and cumulative time wasted — the same triage workflow as an error |
-| `feat/alerts` | Issue alerts (new issue, threshold, regression) with Slack/webhook delivery | Nothing currently tells anybody an issue exists. A dashboard nobody has open is not monitoring |
 | `feat/metrics` | Custom counters, gauges and distributions | See "on metrics" below — the shape of this is a real decision, not just work |
 | `feat/releases` | Release health, crash-free rate, suspect commits | `release` is already on every signal; nothing aggregates by it yet |
 | `feat/teams` | Membership, roles, per-project access | Every signed-in user currently sees every project |
-| `feat/quotas` | Per-project rate limits, spike protection | One runaway loop can currently fill the database |
-| `feat/pii-scrubbing` | Server-side scrubbing rules, default deny | The SDK scrubs; the server trusts what arrives |
-| `feat/sdk-browser` | Browser SDK: `onerror`, web vitals, source maps | Everything so far is backend-only |
+| `feat/quotas` | Per-project rate limits, spike protection | One runaway loop can currently fill the database — and now also fire an alert per event until its cooldown catches it |
+| `feat/sdk-browser` | Browser SDK: `onerror`, web vitals, source maps | Everything so far is backend-only. This is the next one: an error in the browser and the request it made are currently two unrelated facts |
 | `feat/search` | A query language across issues, spans and logs | Filters are per-page and fixed |
 
 ## On metrics
@@ -58,8 +66,9 @@ request that produced it.
 So `feat/metrics` is planned, but the design question comes first: whether to build a separate
 metrics pillar with its own storage and cardinality limits, or to make span attributes
 aggregatable and get most of the value for a fraction of the surface area. The second is
-probably right. It is not scheduled ahead of alerts and detectors either way, because a number
-nobody is alerted on is a number nobody reads.
+probably right. It was not scheduled ahead of alerts and detectors either way, because a
+number nobody is alerted on is a number nobody reads — and now that alerting exists, a metric
+would have something to be alerted on.
 
 ## Explicitly out of scope
 

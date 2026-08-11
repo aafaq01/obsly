@@ -19,6 +19,22 @@ urlpatterns = [
     path("keys/<int:pk>/", views.ProjectKeyUpdateView.as_view(), name="key"),
     path("projects/<int:project_id>/issues/", views.IssueListView.as_view(), name="issues"),
     path(
+        "projects/<int:project_id>/alert-rules/",
+        views.AlertRuleListView.as_view(),
+        name="alert-rules",
+    ),
+    path("alert-rules/<int:pk>/", views.AlertRuleDetailView.as_view(), name="alert-rule"),
+    path(
+        "alert-rules/<int:pk>/test/",
+        views.AlertRuleTestView.as_view(),
+        name="alert-rule-test",
+    ),
+    path(
+        "projects/<int:project_id>/alerts/",
+        views.AlertFireListView.as_view(),
+        name="alerts",
+    ),
+    path(
         "projects/<int:project_id>/performance/",
         views.PerformanceView.as_view(),
         name="performance",

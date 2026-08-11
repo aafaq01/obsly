@@ -10,6 +10,7 @@ const TABS = [
   { to: 'traces', label: 'Traces' },
   { to: 'spans', label: 'Spans' },
   { to: 'logs', label: 'Logs' },
+  { to: 'alerts', label: 'Alerts' },
   { to: 'settings', label: 'Settings' },
 ]
 

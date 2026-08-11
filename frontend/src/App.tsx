@@ -4,6 +4,7 @@ import { Link, Navigate, Route, Routes } from 'react-router-dom'
 import { api } from './api'
 import { Notice } from './components/Notice'
 import { ProjectLayout } from './components/ProjectLayout'
+import { Alerts } from './pages/Alerts'
 import { Dashboard } from './pages/Dashboard'
 import { EndpointDetail } from './pages/EndpointDetail'
 import { IssueDetailPage } from './pages/IssueDetailPage'
@@ -87,6 +88,7 @@ export function App() {
               <Route path="span" element={<SpanDetail />} />
               <Route path="endpoint" element={<EndpointDetail />} />
               <Route path="logs" element={<Logs />} />
+              <Route path="alerts" element={<Alerts />} />
               <Route path="settings" element={<ProjectSettings />} />
 
               {/* Detail pages live under the layout too, so opening an issue does not drop you

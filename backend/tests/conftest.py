@@ -10,6 +10,7 @@ from collections.abc import Iterator
 from typing import Any, cast
 
 import pytest
+from django.contrib.auth.models import User
 from django.core.cache import cache
 from django.http import HttpResponse
 from django.test import Client
@@ -101,3 +102,12 @@ def post(client: Client, project: Project, body: bytes, key: str | None = None) 
             secure=True,
         ),
     )
+
+
+@pytest.fixture
+def staff_client(client: Client) -> Client:
+    """A signed-in browser session. The read API is authenticated, so almost every API test
+    needs one; it lived in three modules before a fourth wanted it."""
+    User.objects.create_user("viewer", password="viewer-password")
+    client.login(username="viewer", password="viewer-password")
+    return client

@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     "apps.projects",
     "apps.events",
     "apps.issues",
+    "apps.alerts",
     "apps.tracing",
     "apps.logs",
     "apps.ingest",
@@ -131,6 +132,18 @@ OBSLY_MAX_ENVELOPE_BYTES = env.int("OBSLY_MAX_ENVELOPE_BYTES", default=1_000_000
 # an installation that has to remember to turn scrubbing on is an installation that stores a
 # credential the first time somebody forgets. Turning it off is a decision with a name.
 OBSLY_SCRUB_SECRETS = env.bool("OBSLY_SCRUB_SECRETS", default=True)
+
+# Alerting. Off is a decision with a name rather than a rule nobody notices is dead.
+OBSLY_ALERTS_ENABLED = env.bool("OBSLY_ALERTS_ENABLED", default=True)
+
+# Where the links in a notification point. Without it the payload carries no URL rather
+# than one to localhost, because an alert linking somewhere unreachable is worse than one
+# that admits it does not know.
+OBSLY_PUBLIC_URL = env("OBSLY_PUBLIC_URL", default="")
+
+# Deliver on the calling thread. Tests only: a background thread outlives the test
+# transaction and looks for a row that was never committed.
+OBSLY_ALERTS_SYNC_DELIVERY = env.bool("OBSLY_ALERTS_SYNC_DELIVERY", default=False)
 
 # --- REST framework ---------------------------------------------------------
 
