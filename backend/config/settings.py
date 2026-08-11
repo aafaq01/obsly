@@ -127,6 +127,11 @@ OBSLY_INGEST_ORIGIN = env("OBSLY_INGEST_ORIGIN", default="http://localhost:8081"
 # nginx enforces its own client_max_body_size above this; both limits are deliberate.
 OBSLY_MAX_ENVELOPE_BYTES = env.int("OBSLY_MAX_ENVELOPE_BYTES", default=1_000_000)
 
+# Redact secret-named keys and secret-shaped values before anything is written. On by default:
+# an installation that has to remember to turn scrubbing on is an installation that stores a
+# credential the first time somebody forgets. Turning it off is a decision with a name.
+OBSLY_SCRUB_SECRETS = env.bool("OBSLY_SCRUB_SECRETS", default=True)
+
 # --- REST framework ---------------------------------------------------------
 
 REST_FRAMEWORK = {
