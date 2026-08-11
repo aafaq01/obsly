@@ -7,6 +7,7 @@ import { Notice, Skeleton } from '../components/Notice'
 import { PeriodPicker } from '../components/PeriodPicker'
 import { RankChart } from '../components/RankChart'
 import { handle } from '../errors'
+import { periodLabel } from '../periods'
 import { bucketLabel, formatMs } from '../format'
 
 type SortKey = 'total_ms' | 'p95' | 'count' | 'failure_rate'
@@ -100,7 +101,13 @@ export function Performance() {
             Throughput per {bucketLabel(data.summary.bucket_seconds)}
           </h2>
           <div className="card" style={{ padding: 16 }}>
-            <EventChart hourly={data.summary.series} bucketSeconds={data.summary.bucket_seconds} />
+            <EventChart
+              hourly={data.summary.series}
+              bucketSeconds={data.summary.bucket_seconds}
+              startedAt={data.summary.series_start}
+              unit="requests"
+              caption={`Requests handled per ${bucketLabel(data.summary.bucket_seconds)} across every endpoint, over the last ${periodLabel(period)}.`}
+            />
           </div>
         </div>
       )}

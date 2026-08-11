@@ -122,9 +122,14 @@ export function IssueDetailPage() {
 
         <aside className="issue-grid__side">
           <section>
-            <h2 className="section__title">Events per hour</h2>
+            <h2 className="section__title">When this happened</h2>
             <div className="card card--tight">
-              <EventChart hourly={issue.hourly} />
+              <EventChart
+                hourly={issue.hourly}
+                bucketSeconds={issue.bucket_seconds}
+                startedAt={issue.hourly_start}
+                caption="Each bar is one bucket of captured events. A cluster says the bug is tied to something that happened; a flat line says it is always on."
+              />
             </div>
           </section>
 

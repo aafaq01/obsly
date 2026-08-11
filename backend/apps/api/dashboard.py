@@ -41,6 +41,9 @@ def overview(project_id: int, period: str) -> dict[str, Any]:
         "periods": list(PERIODS),
         "buckets": len(win.buckets),
         "bucket_seconds": win.bucket_seconds,
+        # When the first bucket starts. With bucket_seconds the client can name every
+        # point on the axis in clock time, instead of only saying how long ago it was.
+        "series_start": win.buckets[0],
         "headline": {
             "transactions": total,
             "throughput_per_minute": round(total / minutes, 3) if minutes else 0,

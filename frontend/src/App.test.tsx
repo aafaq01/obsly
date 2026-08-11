@@ -232,6 +232,37 @@ describe('EventChart', () => {
 
     expect(document.querySelectorAll('.bars__bar--empty')).toHaveLength(3)
   })
+
+  it('labels the axis in clock time when it knows when the series starts', () => {
+    // "3h ago" cannot be lined up against a deploy, an alert, or somebody else's screenshot.
+    // A wall-clock time can.
+    render(
+      <EventChart
+        hourly={[1, 2, 3]}
+        bucketSeconds={3600}
+        startedAt="2026-08-12T09:00:00Z"
+        unit="requests"
+      />,
+    )
+
+    const axis = document.querySelector('.chart2__xaxis')!
+    // Rendered in the viewer's zone, so assert the shape rather than a fixed hour.
+    expect(axis.textContent).toMatch(/\d{1,2}:\d{2}/)
+    expect(axis.textContent).not.toMatch(/ago/)
+  })
+
+  it('still says how long ago when no start time is available', () => {
+    // Charts whose endpoint has not been widened yet must keep working, not lose their axis.
+    render(<EventChart hourly={Array<number>(24).fill(1)} />)
+
+    expect(screen.getByText('24h ago')).toBeInTheDocument()
+  })
+
+  it('states what it is measuring rather than leaving it to the heading', () => {
+    render(<EventChart hourly={[1]} caption="Requests handled per hour across every endpoint." />)
+
+    expect(screen.getByText('Requests handled per hour across every endpoint.')).toBeInTheDocument()
+  })
 })
 
 describe('relativeTime', () => {

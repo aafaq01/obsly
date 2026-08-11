@@ -143,6 +143,7 @@ class PerformanceView(APIView):
                     "failure_rate": _overall_failure_rate(endpoints),
                     "series": _throughput(totals, win),
                     "bucket_seconds": win.bucket_seconds,
+                    "series_start": win.buckets[0],
                 },
             }
         )
@@ -430,6 +431,8 @@ class IssueDetailView(generics.RetrieveAPIView[Issue]):
         issue = self.get_object()
         win = resolve(request.query_params.get("period"))
         issue.hourly = _histograms([issue.pk], win)[issue.pk]  # type: ignore[attr-defined]
+        issue.hourly_start = win.buckets[0]  # type: ignore[attr-defined]
+        issue.bucket_seconds = win.bucket_seconds  # type: ignore[attr-defined]
 
         latest = Event.objects.filter(issue=issue).order_by("-timestamp").first()
 
