@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 
 import { api, type Dashboard as Data } from '../api'
-import { Notice } from '../components/Notice'
+import { Notice, Skeleton } from '../components/Notice'
 import { PeriodPicker } from '../components/PeriodPicker'
 import { Sparkline } from '../components/Sparkline'
 import { handle } from '../errors'
@@ -32,7 +32,7 @@ export function Dashboard() {
   }, [id, period])
 
   if (error) return <Notice>{error}</Notice>
-  if (!data) return <Notice>Loading dashboard…</Notice>
+  if (!data) return <Skeleton rows={4} />
 
   const { headline, series } = data
   const empty = headline.transactions === 0 && headline.errors === 0 && headline.logs === 0

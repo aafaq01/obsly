@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 
 import { api, type TraceSummary } from '../api'
-import { Notice } from '../components/Notice'
+import { Notice, Skeleton } from '../components/Notice'
 import { handle } from '../errors'
 import { formatMs } from '../format'
 import { relativeTime } from '../time'
@@ -78,7 +78,7 @@ export function Traces() {
       </div>
 
       {traces === null ? (
-        <Notice>Loading traces…</Notice>
+        <Skeleton rows={6} />
       ) : traces.length === 0 ? (
         <Notice>
           <strong>No traces yet</strong>
