@@ -492,3 +492,103 @@ class TestSpanDetail:
 
     def test_requires_authentication(self, client: Client, project: Project) -> None:
         assert client.get(f"{self.url(project)}?op=db.query", secure=True).status_code == 403
+
+
+class TestEndpointDetail:
+    def url(self, project: Project) -> str:
+        return reverse("api:endpoint-detail", args=[project.pk])
+
+    def setup_endpoint(self, project: Project) -> None:
+        from apps.tracing.models import Span
+
+        insights = TestSpanInsights()
+        insights.make_span(project, "/checkout", "db.query", "SELECT carts", [10.0, 12.0])
+        insights.make_span(project, "/checkout", "http.client", "POST payments", [200.0])
+        insights.make_span(project, "/other", "db.query", "SELECT other", [5.0])
+        assert Span.objects.count() == 4
+
+    def test_summarises_one_endpoint(self, staff_client: Client, project: Project) -> None:
+        self.setup_endpoint(project)
+
+        payload = json_body(staff_client.get(f"{self.url(project)}?name=/checkout", secure=True))
+
+        assert payload["summary"]["count"] == 2
+        assert payload["name"] == "/checkout"
+
+    def test_shows_where_the_time_goes_inside_it(
+        self, staff_client: Client, project: Project
+    ) -> None:
+        """The table ranks endpoints against each other; this answers what one is doing."""
+        self.setup_endpoint(project)
+
+        payload = json_body(staff_client.get(f"{self.url(project)}?name=/checkout", secure=True))
+
+        descriptions = [span["description"] for span in payload["spans"]]
+        assert "POST payments" in descriptions
+        assert "SELECT other" not in descriptions, "spans from another endpoint leaked in"
+
+    def test_each_span_reports_its_share_of_the_endpoint(
+        self, staff_client: Client, project: Project
+    ) -> None:
+        """The number that says whether fixing a span would move the endpoint at all."""
+        self.setup_endpoint(project)
+
+        payload = json_body(staff_client.get(f"{self.url(project)}?name=/checkout", secure=True))
+
+        shares = {span["description"]: span["share"] for span in payload["spans"]}
+        assert shares["POST payments"] > shares["SELECT carts"]
+        assert 0 < shares["POST payments"] <= 1
+
+    def test_offers_requests_to_open_slowest_first(
+        self, staff_client: Client, project: Project
+    ) -> None:
+        self.setup_endpoint(project)
+
+        payload = json_body(staff_client.get(f"{self.url(project)}?name=/checkout", secure=True))
+
+        assert payload["samples"]
+        assert payload["samples"][0]["transaction_id"]
+
+    def test_an_unknown_endpoint_is_a_404_about_the_period(
+        self, staff_client: Client, project: Project
+    ) -> None:
+        response = staff_client.get(f"{self.url(project)}?name=/nope", secure=True)
+
+        assert response.status_code == 404
+        assert "period" in json_body(response)["detail"].lower()
+
+    def test_name_is_required(self, staff_client: Client, project: Project) -> None:
+        assert staff_client.get(self.url(project), secure=True).status_code == 400
+
+    def test_requires_authentication(self, client: Client, project: Project) -> None:
+        assert client.get(f"{self.url(project)}?name=/x", secure=True).status_code == 403
+
+    def test_two_rows_sharing_a_name_are_told_apart_by_op(
+        self, staff_client: Client, project: Project
+    ) -> None:
+        """The summary table groups by (name, op). Filtering the detail on the name alone
+        merges the two rows into figures that match neither one you could have clicked."""
+        when = NOW - timedelta(minutes=5)
+        for op, duration in (("http.server", 10.0), ("celery.task", 400.0)):
+            Transaction.objects.create(
+                project=project,
+                trace_id="f" * 32,
+                span_id="e" * 16,
+                name="/shared",
+                op=op,
+                start_timestamp=when,
+                timestamp=when,
+                duration_ms=duration,
+                payload={},
+            )
+
+        served = json_body(
+            staff_client.get(f"{self.url(project)}?name=/shared&op=http.server", secure=True)
+        )
+        queued = json_body(
+            staff_client.get(f"{self.url(project)}?name=/shared&op=celery.task", secure=True)
+        )
+
+        assert served["summary"]["count"] == 1
+        assert served["summary"]["slowest"] == 10.0
+        assert queued["summary"]["slowest"] == 400.0

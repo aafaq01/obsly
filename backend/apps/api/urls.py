@@ -27,6 +27,11 @@ urlpatterns = [
     path("projects/<int:project_id>/logs/", views.LogListView.as_view(), name="logs"),
     path("projects/<int:project_id>/spans/", views.SpanInsightsView.as_view(), name="spans"),
     path(
+        "projects/<int:project_id>/endpoint/",
+        views.EndpointDetailView.as_view(),
+        name="endpoint-detail",
+    ),
+    path(
         "projects/<int:project_id>/span/",
         views.SpanDetailView.as_view(),
         name="span-detail",

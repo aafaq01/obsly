@@ -1,14 +1,13 @@
 import { useEffect, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 
 import { api, type Performance as PerformanceData } from '../api'
 import { EventChart } from '../components/EventChart'
-import { Magnitude } from '../components/Magnitude'
 import { Notice, Skeleton } from '../components/Notice'
 import { PeriodPicker } from '../components/PeriodPicker'
 import { RankChart } from '../components/RankChart'
 import { handle } from '../errors'
-import { bucketLabel, columnMax, formatMs } from '../format'
+import { bucketLabel, formatMs } from '../format'
 
 type SortKey = 'total_ms' | 'p95' | 'count' | 'failure_rate'
 
@@ -30,7 +29,10 @@ export function Performance() {
   const { projectId } = useParams()
   const [data, setData] = useState<PerformanceData | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [period, setPeriod] = useState('24h')
+  // In the URL, not in state: a breadcrumb back from a detail page has to restore the
+  // window you were looking at, and state cannot survive that trip.
+  const [params, setParams] = useSearchParams()
+  const period = params.get('period') ?? '24h'
   const [sort, setSort] = useState<SortKey>('total_ms')
 
   const id = Number(projectId)
@@ -56,11 +58,6 @@ export function Performance() {
   if (!data) return <Skeleton rows={6} />
 
   const rows = [...data.endpoints].sort((a, b) => b[sort] - a[sort])
-  // Each column scales to its own maximum: a p50 bar and a p99 bar on one absolute scale
-  // would make every p50 invisible.
-  const maxP95 = columnMax(rows, (row) => row.p95)
-  const maxTotal = columnMax(rows, (row) => row.total_ms)
-  const maxTpm = columnMax(rows, (row) => row.throughput_per_minute)
 
   return (
     <>
@@ -71,7 +68,14 @@ export function Performance() {
       </p>
 
       <div className="filters">
-        <PeriodPicker value={period} onChange={setPeriod} />
+        <PeriodPicker
+          value={period}
+          onChange={(next) => {
+            const updated = new URLSearchParams(params)
+            updated.set('period', next)
+            setParams(updated)
+          }}
+        />
         <select
           value={sort}
           onChange={(e) => setSort(e.target.value as SortKey)}
@@ -145,35 +149,29 @@ export function Performance() {
               </thead>
               <tbody>
                 {rows.map((row) => (
-                  <tr key={`${row.op}:${row.name}`}>
+                  <tr key={`${row.op}:${row.name}`} className="perf__row">
                     <td>
-                      <span className="perf__name">{row.name}</span>
-                      <span className="perf__op">{row.op}</span>
+                      <Link
+                        className="perf__link"
+                        to={
+                          `/projects/${id}/endpoint?period=${period}` +
+                          `&name=${encodeURIComponent(row.name)}` +
+                          `&op=${encodeURIComponent(row.op)}`
+                        }
+                      >
+                        <span className="perf__name">{row.name}</span>
+                        <span className="perf__op">{row.op}</span>
+                      </Link>
                     </td>
-                    <Magnitude
-                      value={row.throughput_per_minute}
-                      max={maxTpm}
-                      lead={sort === 'count'}
-                    >
-                      {row.throughput_per_minute.toFixed(2)}
-                    </Magnitude>
+                    <td className="num">{row.throughput_per_minute.toFixed(2)}</td>
                     <td className="num">{ms(row.p50)}</td>
                     <td className="num">{ms(row.p75)}</td>
-                    <Magnitude
-                      value={row.p95}
-                      max={maxP95}
-                      className="strong"
-                      lead={sort === 'p95'}
-                    >
-                      {ms(row.p95)}
-                    </Magnitude>
+                    <td className="num strong">{ms(row.p95)}</td>
                     <td className="num">{ms(row.p99)}</td>
                     <td className={`num ${row.failure_rate > 0 ? 'bad' : ''}`}>
                       {percent(row.failure_rate)}
                     </td>
-                    <Magnitude value={row.total_ms} max={maxTotal} lead={sort === 'total_ms'}>
-                      {seconds(row.total_ms)}
-                    </Magnitude>
+                    <td className="num">{seconds(row.total_ms)}</td>
                   </tr>
                 ))}
               </tbody>

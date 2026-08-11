@@ -20,6 +20,7 @@ from rest_framework.views import APIView
 
 from apps.api.dashboard import overview
 from apps.api.performance import (
+    endpoint_detail,
     endpoint_summary,
     span_detail,
     span_ops,
@@ -193,6 +194,31 @@ class SpanInsightsView(APIView):
                 "spans": span_summary(project_id, period, op=op),
             }
         )
+
+
+class EndpointDetailView(APIView):
+    """One endpoint: where its time goes, and which requests to open."""
+
+    def get(self, request: Request, project_id: int) -> Response:
+        get_object_or_404(Project, pk=project_id)
+
+        name = request.query_params.get("name", "").strip()
+        if not name:
+            return Response({"detail": "name is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        detail = endpoint_detail(
+            project_id,
+            request.query_params.get("period", "24h"),
+            name=name,
+            op=request.query_params.get("op", "").strip(),
+        )
+        if detail is None:
+            return Response(
+                {"detail": "No transactions matched in this period.", "name": name},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        return Response(detail)
 
 
 class SpanDetailView(APIView):
