@@ -6,7 +6,7 @@ from django.contrib.auth.models import User
 from django.test import Client
 from django.urls import reverse
 
-from apps.projects.models import Project
+from apps.projects.models import Project, ProjectKey
 from apps.tracing.models import SpanStatus, Transaction
 from tests.conftest import json_body
 
@@ -234,3 +234,157 @@ class TestTraces:
         response = client.get(reverse("api:traces", args=[project.pk]), secure=True)
 
         assert response.status_code == 403
+
+
+class TestSpanInsights:
+    def make_span(
+        self, project: Project, name: str, op: str, description: str, durations: list[float]
+    ) -> None:
+        from apps.tracing.models import Span
+
+        when = NOW - timedelta(minutes=5)
+        txn = Transaction.objects.create(
+            project=project,
+            trace_id="f" * 32,
+            span_id="e" * 16,
+            name=name,
+            start_timestamp=when,
+            timestamp=when,
+            duration_ms=sum(durations),
+            payload={},
+        )
+        Span.objects.bulk_create(
+            Span(
+                transaction=txn,
+                trace_id=txn.trace_id,
+                span_id=f"{index:016x}",
+                op=op,
+                description=description,
+                start_timestamp=when,
+                timestamp=when,
+                duration_ms=duration,
+            )
+            for index, duration in enumerate(durations)
+        )
+
+    def url(self, project: Project) -> str:
+        return reverse("api:spans", args=[project.pk])
+
+    def test_groups_spans_by_what_they_do(self, staff_client: Client, project: Project) -> None:
+        """A waterfall shows one request; the span that matters is the one that runs constantly."""
+        self.make_span(project, "/a", "db.query", "SELECT * FROM users", [5.0, 6.0, 7.0])
+        self.make_span(project, "/b", "db.query", "SELECT * FROM users", [5.0])
+
+        rows = json_body(staff_client.get(self.url(project), secure=True))["spans"]
+
+        [row] = [r for r in rows if r["description"] == "SELECT * FROM users"]
+        assert row["count"] == 4
+        assert row["transactions"] == 2
+
+    def test_calls_per_request_exposes_an_n_plus_one(
+        self, staff_client: Client, project: Project
+    ) -> None:
+        """25 identical queries in one request is the signature, and the aggregate is where it
+        is visible without reading a waterfall."""
+        self.make_span(project, "/report", "db.query", "SELECT total FROM orders", [2.0] * 25)
+
+        rows = json_body(staff_client.get(self.url(project), secure=True))["spans"]
+
+        [row] = [r for r in rows if "orders" in r["description"]]
+        assert row["per_transaction"] == 25.0
+
+    def test_ranks_by_time_spent(self, staff_client: Client, project: Project) -> None:
+        self.make_span(project, "/a", "db.query", "fast but constant", [1.0] * 300)
+        self.make_span(project, "/b", "db.query", "slow but rare", [200.0])
+
+        rows = json_body(staff_client.get(self.url(project), secure=True))["spans"]
+
+        assert rows[0]["description"] == "fast but constant"
+
+    def test_filters_by_operation(self, staff_client: Client, project: Project) -> None:
+        self.make_span(project, "/a", "db.query", "a query", [5.0])
+        self.make_span(project, "/a", "cache.get", "a cache read", [1.0])
+
+        rows = json_body(staff_client.get(f"{self.url(project)}?op=cache.get", secure=True))
+
+        assert [r["description"] for r in rows["spans"]] == ["a cache read"]
+        assert set(rows["ops"]) == {"db.query", "cache.get"}
+
+    def test_requires_authentication(self, client: Client, project: Project) -> None:
+        assert client.get(self.url(project), secure=True).status_code == 403
+
+
+class TestDashboard:
+    def url(self, project: Project) -> str:
+        return reverse("api:dashboard", args=[project.pk])
+
+    def test_every_series_shares_one_bucket_grid(
+        self, staff_client: Client, project: Project
+    ) -> None:
+        """Charts that disagree about what "three hours ago" means invite conclusions the data
+        does not support."""
+        make(project, "/a", [10.0] * 3)
+
+        payload = json_body(staff_client.get(self.url(project), secure=True))
+
+        lengths = {len(series) for series in payload["series"].values()}
+        assert len(lengths) == 1
+        assert lengths.pop() == payload["buckets"]
+
+    def test_headline_counts_every_signal(self, staff_client: Client, project: Project) -> None:
+        make(project, "/a", [10.0] * 4)
+        make(project, "/a", [10.0], status=SpanStatus.INTERNAL_ERROR)
+
+        headline = json_body(staff_client.get(self.url(project), secure=True))["headline"]
+
+        assert headline["transactions"] == 5
+        assert headline["failure_rate"] == pytest.approx(0.2)
+        assert headline["p95_ms"] > 0
+
+    def test_top_issues_are_unresolved_only(
+        self, staff_client: Client, project: Project, project_key: ProjectKey
+    ) -> None:
+        """A resolved issue on the overview is a distraction from the open ones."""
+        from apps.issues.models import Issue, IssueStatus
+        from tests.conftest import build_envelope, post
+        from tests.test_grouping import FRAMES, error
+
+        post(
+            staff_client,
+            project,
+            build_envelope(("event", error(frames=FRAMES))),
+            project_key.public_key,
+        )
+        assert Issue.objects.count() == 1
+
+        payload = json_body(staff_client.get(self.url(project), secure=True))
+        assert len(payload["top_issues"]) == 1
+
+        Issue.objects.update(status=IssueStatus.RESOLVED)
+        payload = json_body(staff_client.get(self.url(project), secure=True))
+        assert payload["top_issues"] == []
+
+    def test_an_empty_project_returns_zeroes_not_an_error(
+        self, staff_client: Client, project: Project
+    ) -> None:
+        payload = json_body(staff_client.get(self.url(project), secure=True))
+
+        assert payload["headline"]["transactions"] == 0
+        assert payload["headline"]["failure_rate"] == 0.0
+        assert payload["top_issues"] == []
+
+    def test_requires_authentication(self, client: Client, project: Project) -> None:
+        assert client.get(self.url(project), secure=True).status_code == 403
+
+
+class TestSpanOps:
+    def test_operations_are_deduplicated(self, staff_client: Client, project: Project) -> None:
+        """Django's Meta.ordering adds start_timestamp to the SELECT, so a naive .distinct()
+        dedupes on (op, start_timestamp) and returns one entry per span."""
+        insights = TestSpanInsights()
+        insights.make_span(project, "/a", "db.query", "q", [1.0] * 30)
+        insights.make_span(project, "/a", "cache.get", "c", [1.0] * 30)
+
+        ops = json_body(staff_client.get(reverse("api:spans", args=[project.pk]), secure=True))
+
+        assert ops["ops"] == ["cache.get", "db.query"]

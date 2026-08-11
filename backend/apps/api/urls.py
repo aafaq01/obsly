@@ -25,6 +25,12 @@ urlpatterns = [
     ),
     path("projects/<int:project_id>/traces/", views.TraceListView.as_view(), name="traces"),
     path("projects/<int:project_id>/logs/", views.LogListView.as_view(), name="logs"),
+    path("projects/<int:project_id>/spans/", views.SpanInsightsView.as_view(), name="spans"),
+    path(
+        "projects/<int:project_id>/dashboard/",
+        views.DashboardView.as_view(),
+        name="dashboard",
+    ),
     path("traces/<uuid:pk>/", views.TraceDetailView.as_view(), name="trace"),
     path("issues/<int:pk>/", views.IssueDetailView.as_view(), name="issue"),
     path("issues/<int:pk>/status/", views.IssueStatusView.as_view(), name="issue-status"),
