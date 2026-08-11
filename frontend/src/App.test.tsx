@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -493,10 +493,13 @@ describe('Performance page', () => {
 
     renderPerf()
 
-    expect(await screen.findByText('/checkout')).toBeInTheDocument()
-    expect(screen.getByText('20ms')).toBeInTheDocument()
-    expect(screen.getByText('8.00s')).toBeInTheDocument()
-    expect(screen.getByText('9.10s')).toBeInTheDocument()
+    // Scoped to the table: the rank chart above it lists the same endpoints, and an unscoped
+    // query cannot tell which one it found.
+    const table = within(await screen.findByRole('table'))
+    expect(table.getByText('/checkout')).toBeInTheDocument()
+    expect(table.getByText('20ms')).toBeInTheDocument()
+    expect(table.getByText('8.00s')).toBeInTheDocument()
+    expect(table.getByText('9.10s')).toBeInTheDocument()
   })
 
   it('ranks by time spent, so a rarely-called slow endpoint does not top the list', async () => {
@@ -506,9 +509,9 @@ describe('Performance page', () => {
     })
 
     renderPerf()
-    await screen.findByText('/checkout')
 
-    const names = screen.getAllByText(/^\/(checkout|health)$/).map((n) => n.textContent)
+    const table = within(await screen.findByRole('table'))
+    const names = table.getAllByText(/^\/(checkout|health)$/).map((n) => n.textContent)
     expect(names[0]).toBe('/checkout')
   })
 
@@ -521,7 +524,8 @@ describe('Performance page', () => {
 
     renderPerf()
 
-    expect(await screen.findAllByText('<1ms')).not.toHaveLength(0)
+    const table = within(await screen.findByRole('table'))
+    expect(table.getAllByText('<1ms')).not.toHaveLength(0)
   })
 
   it('explains that tracing is off rather than showing an empty table', async () => {
@@ -549,7 +553,7 @@ describe('Performance page', () => {
     })
 
     renderPerf()
-    await screen.findByText('/checkout')
+    await screen.findByRole('table')
     await userEvent.selectOptions(screen.getByLabelText('Period'), '7d')
 
     await waitFor(() => {
@@ -715,7 +719,9 @@ describe('Correlation', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByText('ValueError: cart is empty')
+    // The title, not the breadcrumb — both now carry the issue title, which is the point of
+    // the breadcrumb.
+    await screen.findByRole('heading', { name: 'ValueError: cart is empty' })
     expect(screen.queryByText(/View trace/)).not.toBeInTheDocument()
   })
 
@@ -1132,7 +1138,7 @@ describe('Instrument-panel UI', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByText('/slow')
+    await screen.findByRole('table')
     const bars = [...document.querySelectorAll('.mag')].map((cell) =>
       (cell as HTMLElement).style.getPropertyValue('--mag'),
     )
@@ -1253,5 +1259,354 @@ describe('Span detail', () => {
     renderDetail()
 
     expect(await screen.findByText(/Could not load/)).toBeInTheDocument()
+  })
+})
+
+describe('Navigation depth', () => {
+  it('gives a trace a way back out', async () => {
+    // It had none: the only exit was the browser button, and a page you can only leave that
+    // way feels like a dead end even though it technically is not.
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/1/': { body: { ...PROJECT, keys: [] } },
+      '/traces/t1/': {
+        body: {
+          id: 't1',
+          trace_id: 'a'.repeat(32),
+          span_id: 'b'.repeat(16),
+          name: '/checkout',
+          op: 'http.server',
+          status: 'ok',
+          start_timestamp: new Date().toISOString(),
+          timestamp: new Date().toISOString(),
+          duration_ms: 12,
+          environment: 'production',
+          release: 'r@1',
+          span_count: 0,
+          spans: [],
+          errors: [],
+          logs: [],
+        },
+      },
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/projects/1/traces/t1']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    const crumb = await screen.findByRole('navigation', { name: 'Breadcrumb' })
+    expect(within(crumb).getByRole('link', { name: 'Traces' })).toHaveAttribute(
+      'href',
+      '/projects/1/traces',
+    )
+  })
+
+  it('does not link the page you are already on', async () => {
+    // A link to where you already are is a dead control, and one dead control teaches people
+    // the whole trail is decorative.
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/1/': { body: { ...PROJECT, keys: [] } },
+      '/issues/9/': {
+        body: {
+          issue: { ...ISSUE, fingerprint: 'f', fingerprint_components: [] },
+          latest_event: null,
+          tags: {},
+          trace: null,
+        },
+      },
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/projects/1/issues/9']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    const crumb = await screen.findByRole('navigation', { name: 'Breadcrumb' })
+    const current = within(crumb).getByText('ValueError: cart is empty')
+    expect(current).toHaveAttribute('aria-current', 'page')
+    expect(current.tagName).not.toBe('A')
+  })
+
+  it('keeps you on the same tab when you switch project', async () => {
+    // Being thrown back to a list every time you compare two services is the friction that
+    // makes people stop comparing.
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/1/': { body: { ...PROJECT, keys: [] } },
+      '/projects/': { body: [PROJECT, { ...PROJECT, id: 2, name: 'Billing' }] },
+      '/projects/1/logs/': { body: [] },
+      '/projects/2/logs/': { body: [] },
+      '/projects/2/': { body: { ...PROJECT, id: 2, name: 'Billing', keys: [] } },
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/projects/1/logs']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    await userEvent.selectOptions(await screen.findByLabelText('Project'), '2')
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Project')).toHaveValue('2')
+    })
+    // Still on Logs, not bounced to the overview.
+    expect(screen.getByRole('heading', { name: 'Logs' })).toBeInTheDocument()
+  })
+})
+
+describe('Rank charts', () => {
+  const PERF = {
+    period: '24h',
+    endpoints: [
+      {
+        name: '/slow',
+        op: 'http.server',
+        count: 5,
+        throughput_per_minute: 0.1,
+        failure_rate: 0,
+        total_ms: 5000,
+        p50: 900,
+        p75: 950,
+        p95: 1000,
+        p99: 1100,
+      },
+      {
+        name: '/fast',
+        op: 'http.server',
+        count: 500,
+        throughput_per_minute: 5,
+        failure_rate: 0,
+        total_ms: 500,
+        p50: 1,
+        p75: 1,
+        p95: 2,
+        p99: 3,
+      },
+    ],
+    summary: {
+      transactions: 505,
+      throughput_per_minute: 5.1,
+      failure_rate: 0,
+      series: [505],
+      bucket_seconds: 3600,
+    },
+  }
+
+  function renderPerf() {
+    return render(
+      <MemoryRouter initialEntries={['/projects/1/performance']}>
+        <App />
+      </MemoryRouter>,
+    )
+  }
+
+  it('ranks by the same measure the table is sorted by', async () => {
+    // A chart and a table that disagree about the same window is worse than either alone.
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/1/': { body: { ...PROJECT, keys: [] } },
+      '/projects/1/performance/': { body: PERF },
+    })
+
+    renderPerf()
+
+    expect(await screen.findByText('Top endpoints by time spent')).toBeInTheDocument()
+
+    await userEvent.selectOptions(screen.getByLabelText('Sort by'), 'p95')
+    expect(await screen.findByText('Top endpoints by p95 latency')).toBeInTheDocument()
+  })
+
+  it('says what a bar length means rather than implying it', async () => {
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/1/': { body: { ...PROJECT, keys: [] } },
+      '/projects/1/performance/': { body: PERF },
+    })
+
+    renderPerf()
+
+    expect(
+      await screen.findByText(/Bar length is time spent, relative to the highest/),
+    ).toBeInTheDocument()
+  })
+
+  it('scales the longest bar to full width and the rest against it', async () => {
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/1/': { body: { ...PROJECT, keys: [] } },
+      '/projects/1/performance/': { body: PERF },
+    })
+
+    renderPerf()
+
+    await screen.findByText('Top endpoints by time spent')
+    const widths = [...document.querySelectorAll('.rank__bar')].map(
+      (bar) => (bar as HTMLElement).style.width,
+    )
+    expect(widths[0]).toBe('100%')
+    // 500 against 5000 is 10% — the bar has to be honest about the ratio.
+    expect(widths[1]).toBe('10%')
+  })
+
+  it('links a span bar into its detail page', async () => {
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/1/': { body: { ...PROJECT, keys: [] } },
+      '/projects/1/spans/': {
+        body: {
+          period: '24h',
+          ops: ['db.query'],
+          spans: [
+            {
+              op: 'db.query',
+              description: 'SELECT 1',
+              count: 10,
+              transactions: 2,
+              per_transaction: 5,
+              throughput_per_minute: 0.1,
+              total_ms: 100,
+              p50: 9,
+              p95: 12,
+            },
+          ],
+        },
+      },
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/projects/1/spans']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    await screen.findByText(/Bar length is time spent/)
+    const links = screen.getAllByRole('link').map((a) => a.getAttribute('href'))
+    expect(links.some((href) => href?.includes('/projects/1/span?'))).toBe(true)
+  })
+})
+
+describe('Review findings', () => {
+  it('switching project from a detail page does not carry the record id across', async () => {
+    // /projects/1/issues/9 -> /projects/2/issues/9 would render project 1's issue under
+    // project 2's header. Only the tab segment travels.
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/': { body: [PROJECT, { ...PROJECT, id: 2, name: 'Billing' }] },
+      '/projects/1/': { body: { ...PROJECT, keys: [] } },
+      '/projects/2/': { body: { ...PROJECT, id: 2, name: 'Billing', keys: [] } },
+      '/issues/9/': {
+        body: {
+          issue: { ...ISSUE, fingerprint: 'f', fingerprint_components: [] },
+          latest_event: null,
+          tags: {},
+          trace: null,
+        },
+      },
+      '/projects/2/issues/': { body: [] },
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/projects/1/issues/9']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    await userEvent.selectOptions(await screen.findByLabelText('Project'), '2')
+
+    // The issue stream for project 2, not issue 9 wearing project 2's header.
+    expect(await screen.findByRole('heading', { name: 'Issues' })).toBeInTheDocument()
+  })
+
+  it('ranked bars navigate in-app rather than reloading the page', async () => {
+    // A raw <a href> full-page-reloads an SPA. An href-only assertion passes either way, which
+    // is why this asserts the navigation actually happened.
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/1/': { body: { ...PROJECT, keys: [] } },
+      '/projects/1/spans/': {
+        body: {
+          period: '24h',
+          ops: ['db.query'],
+          spans: [
+            {
+              op: 'db.query',
+              description: 'SELECT 1',
+              count: 10,
+              transactions: 2,
+              per_transaction: 5,
+              throughput_per_minute: 0.1,
+              total_ms: 100,
+              p50: 9,
+              p95: 12,
+            },
+          ],
+        },
+      },
+      '/projects/1/span/': {
+        body: {
+          op: 'db.query',
+          description: 'SELECT 1',
+          period: '24h',
+          summary: {
+            count: 10,
+            transactions: 2,
+            per_transaction: 5,
+            total_ms: 100,
+            p50: 9,
+            p95: 12,
+            p99: 12,
+            slowest: 14,
+          },
+          distribution: [{ from_ms: 0, to_ms: 1, count: 10 }],
+          callers: [],
+          samples: [],
+        },
+      },
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/projects/1/spans']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    const chart = await screen.findByRole('figure')
+    await userEvent.click(within(chart).getByRole('link'))
+
+    expect(await screen.findByText('Duration distribution')).toBeInTheDocument()
+  })
+
+  it('does not stack an empty chart on top of an empty state', async () => {
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/1/': { body: { ...PROJECT, keys: [] } },
+      '/projects/1/performance/': {
+        body: {
+          period: '24h',
+          endpoints: [],
+          summary: {
+            transactions: 0,
+            throughput_per_minute: 0,
+            failure_rate: 0,
+            series: [],
+            bucket_seconds: 3600,
+          },
+        },
+      },
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/projects/1/performance']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText(/No transactions yet/)).toBeInTheDocument()
+    expect(screen.queryByText(/Nothing to rank yet/)).not.toBeInTheDocument()
   })
 })

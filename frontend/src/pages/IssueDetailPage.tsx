@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 
 import { api, type ExceptionValue, type Frame, type IssueDetail } from '../api'
+import { Breadcrumbs } from '../components/Breadcrumbs'
 import { EventChart } from '../components/EventChart'
 import { Notice } from '../components/Notice'
 import { StatusActions } from '../components/StatusActions'
@@ -25,9 +26,12 @@ export function IssueDetailPage() {
 
   return (
     <>
-      <p className="crumb">
-        <Link to={`/projects/${issue.project}/issues`}>← Issues</Link>
-      </p>
+      <Breadcrumbs
+        trail={[
+          { label: 'Issues', to: `/projects/${issue.project}/issues` },
+          { label: issue.title },
+        ]}
+      />
 
       <div className="detail-header">
         <h1 className="detail-title">{issue.title}</h1>

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 
 import { api, type SpanDetail as Detail } from '../api'
+import { Breadcrumbs } from '../components/Breadcrumbs'
 import { Notice, Skeleton } from '../components/Notice'
 import { handle } from '../errors'
 import { columnMax, formatMs } from '../format'
@@ -47,9 +48,12 @@ export function SpanDetail() {
 
   return (
     <>
-      <p className="crumb">
-        <Link to={`/projects/${id}/spans?period=${period}`}>← Spans</Link>
-      </p>
+      <Breadcrumbs
+        trail={[
+          { label: 'Spans', to: `/projects/${id}/spans?period=${period}` },
+          { label: description || detail.op },
+        ]}
+      />
 
       <h1 className="detail-title mono-title">{description || detail.op}</h1>
       <div className="detail-culprit">{detail.op}</div>
