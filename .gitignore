@@ -42,3 +42,7 @@ graphify-out/
 
 # Per-machine Claude Code settings (absolute local paths, personal hooks).
 .claude/settings.local.json
+
+# Build artefacts from `uv build` / `npm pack` — regenerated on every release.
+sdk/python/dist/
+sdk/browser/*.tgz

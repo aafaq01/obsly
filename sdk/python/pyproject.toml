@@ -1,9 +1,46 @@
 [project]
 name = "obsly-sdk"
 version = "0.1.0"
-description = "Obsly SDK for Python — error reporting with no runtime dependencies"
+description = "Obsly SDK for Python — errors, tracing, logs and performance, with no runtime dependencies"
+readme = "README.md"
 requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Aafaq Rana", email = "m.aafaq.rana@gmail.com" }]
+keywords = [
+    "observability",
+    "error-tracking",
+    "tracing",
+    "apm",
+    "monitoring",
+    "opentelemetry",
+    "fastapi",
+    "asgi",
+]
+
+# The zero-dependency promise is the SDK's whole point, and an empty list is how it is stated
+# to anyone reading the metadata rather than the README.
 dependencies = []
+
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Software Development :: Bug Tracking",
+    "Topic :: System :: Monitoring",
+    "Typing :: Typed",
+]
+
+[project.urls]
+Homepage = "https://github.com/aafaq01/obsly"
+Repository = "https://github.com/aafaq01/obsly"
+Issues = "https://github.com/aafaq01/obsly/issues"
+Changelog = "https://github.com/aafaq01/obsly/releases"
 
 [dependency-groups]
 dev = [
@@ -22,6 +59,14 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["obsly"]
+# PEP 561. Without the marker in the wheel, a consumer's type checker ignores every
+# annotation in a package that passes mypy --strict.
+artifacts = ["obsly/py.typed"]
+
+[tool.hatch.build.targets.sdist]
+# The tests ship with the source distribution so a packager can run them; nothing else in the
+# directory belongs in a release.
+include = ["obsly", "tests", "README.md", "LICENSE", "pyproject.toml"]
 
 [tool.ruff]
 target-version = "py311"
