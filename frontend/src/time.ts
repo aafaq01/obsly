@@ -62,3 +62,22 @@ export function bucketTime(
   if (Number.isNaN(start.getTime())) return null
   return new Date(start.getTime() + index * bucketSeconds * 1000)
 }
+
+/**
+ * A clock time precise enough to tell two spans apart.
+ *
+ * `absoluteTime` stops at seconds, which is the right precision for "when did this issue last
+ * happen" and useless inside a trace: a request that finishes in 61ms renders twenty-five rows
+ * all stamped with the same second, which looks like a bug in the timestamps rather than a
+ * fast request.
+ */
+export function preciseTime(iso: string): string {
+  const at = new Date(iso)
+  const clock = at.toLocaleTimeString(undefined, {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  })
+  return `${clock}.${String(at.getMilliseconds()).padStart(3, '0')}`
+}

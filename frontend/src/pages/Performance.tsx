@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 
+import { Select } from '../components/Select'
+
 import { api, type Performance as PerformanceData } from '../api'
 import { EventChart } from '../components/EventChart'
 import { Notice, Skeleton } from '../components/Notice'
@@ -68,7 +70,7 @@ export function Performance() {
       </p>
 
       <div className="filters">
-        <select
+        <Select
           value={sort}
           onChange={(e) => setSort(e.target.value as SortKey)}
           aria-label="Sort by"
@@ -77,7 +79,7 @@ export function Performance() {
           <option value="p95">p95</option>
           <option value="count">Throughput</option>
           <option value="failure_rate">Failure rate</option>
-        </select>
+        </Select>
       </div>
 
       <div className="stat-row">

@@ -1,5 +1,7 @@
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 
+import { Select } from './Select'
+
 import type { Project } from '../api'
 import { PERIODS } from '../periods'
 
@@ -71,7 +73,7 @@ export function PageFilters({ projects }: { projects: Project[] }) {
       {projects.length > 0 && (
         <label className="pagebar__field">
           <span className="pagebar__label">Project</span>
-          <select
+          <Select
             value={projectId ?? ''}
             onChange={(event) => switchProject(event.target.value)}
             aria-label="Project"
@@ -82,13 +84,13 @@ export function PageFilters({ projects }: { projects: Project[] }) {
                 {project.name}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
       )}
 
       <label className="pagebar__field">
         <span className="pagebar__label">Period</span>
-        <select
+        <Select
           value={period}
           onChange={(event) => setPeriod(event.target.value)}
           aria-label="Period"
@@ -98,7 +100,7 @@ export function PageFilters({ projects }: { projects: Project[] }) {
               {option.label}
             </option>
           ))}
-        </select>
+        </Select>
       </label>
     </div>
   )

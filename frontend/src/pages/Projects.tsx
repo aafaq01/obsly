@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 
+import { Select } from '../components/Select'
+
 import { api, type Organization, type Project } from '../api'
 import { Notice } from '../components/Notice'
 import { handle } from '../errors'
@@ -144,7 +146,7 @@ function NewProject({ organizations, onCreated, onOrganizationCreated }: NewProj
           aria-label="Project name"
           required
         />
-        <select
+        <Select
           value={platform}
           onChange={(event) => setPlatform(event.target.value)}
           aria-label="Platform"
@@ -154,9 +156,9 @@ function NewProject({ organizations, onCreated, onOrganizationCreated }: NewProj
               {option}
             </option>
           ))}
-        </select>
+        </Select>
         {organizations.length > 0 && (
-          <select
+          <Select
             value={selected ?? ''}
             onChange={(event) => setOrganizationId(Number(event.target.value))}
             aria-label="Organization"
@@ -166,7 +168,7 @@ function NewProject({ organizations, onCreated, onOrganizationCreated }: NewProj
                 {org.name}
               </option>
             ))}
-          </select>
+          </Select>
         )}
         <button className="button button--primary" type="submit" disabled={busy}>
           {busy ? 'Creating…' : 'Create'}

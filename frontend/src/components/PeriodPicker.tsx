@@ -1,3 +1,4 @@
+import { Select } from './Select'
 import { PERIODS } from '../periods'
 
 /**
@@ -14,12 +15,12 @@ export function PeriodPicker({
   onChange: (period: string) => void
 }) {
   return (
-    <select value={value} onChange={(event) => onChange(event.target.value)} aria-label="Period">
+    <Select value={value} onChange={(event) => onChange(event.target.value)} aria-label="Period">
       {PERIODS.map((period) => (
         <option key={period.value} value={period.value}>
           {period.label}
         </option>
       ))}
-    </select>
+    </Select>
   )
 }

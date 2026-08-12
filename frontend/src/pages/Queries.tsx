@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 
+import { Select } from '../components/Select'
+
 import { api, type SpanInsights } from '../api'
 import { Notice, Skeleton } from '../components/Notice'
 import { RankChart } from '../components/RankChart'
@@ -78,7 +80,7 @@ export function Queries({ layer = '' }: { layer?: string } = {}) {
       </p>
 
       <div className="filters">
-        <select value={op} onChange={(e) => update('op', e.target.value)} aria-label="Operation">
+        <Select value={op} onChange={(e) => update('op', e.target.value)} aria-label="Operation">
           <option value="">All operations</option>
           {data.ops
             .filter((option) => !layer || option.startsWith(layer))
@@ -87,8 +89,8 @@ export function Queries({ layer = '' }: { layer?: string } = {}) {
                 {option}
               </option>
             ))}
-        </select>
-        <select
+        </Select>
+        <Select
           value={sort}
           onChange={(e) => setSort(e.target.value as SortKey)}
           aria-label="Sort by"
@@ -97,7 +99,7 @@ export function Queries({ layer = '' }: { layer?: string } = {}) {
           <option value="per_transaction">Calls per request</option>
           <option value="p95">p95</option>
           <option value="count">Calls</option>
-        </select>
+        </Select>
       </div>
 
       {rows.length === 0 ? (
