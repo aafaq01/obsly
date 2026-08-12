@@ -2617,3 +2617,31 @@ button.danger:hover {
   color: var(--ink);
   font-weight: 600;
 }
+
+/* The split of visits across the three bands, as one bar. Proportional widths, because the
+   question it answers is "how many people", and three numbers in a row make you do that
+   arithmetic yourself. */
+.bands {
+  display: flex;
+  height: 5px;
+  border-radius: 3px;
+  overflow: hidden;
+  margin: 8px 0 6px;
+  background: var(--grid);
+}
+
+/* The segment itself. Only the three modifiers were defined, so the block had no width
+   rule of its own and relied entirely on the inline flex-grow. */
+.bands__part {
+  min-width: 0;
+}
+
+.bands__part--good {
+  background: var(--status-good);
+}
+.bands__part--needs_improvement {
+  background: var(--status-warning);
+}
+.bands__part--poor {
+  background: var(--status-critical);
+}

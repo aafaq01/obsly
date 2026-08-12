@@ -17,10 +17,10 @@ is the only actionable form of the number.
 
 from typing import Any
 
-from django.db.models import Count, F, FloatField, Func
+from django.db.models import Count, F, FloatField, Func, Q
 
 from apps.api.performance import Percentile
-from apps.api.timewindow import resolve
+from apps.api.timewindow import Window, resolve
 from apps.tracing.models import Transaction
 
 # (key, label, what it measures, good below, poor above). The middle band is everything
@@ -88,6 +88,8 @@ def summary(project_id: int, period: str) -> dict[str, Any]:
     return {
         "period": win.period,
         "pageloads": pageloads.count(),
+        "bucket_seconds": win.bucket_seconds,
+        "series_start": win.buckets[0],
         "vitals": [
             {
                 "key": key,
@@ -99,11 +101,91 @@ def summary(project_id: int, period: str) -> dict[str, Any]:
                 "good_below": good,
                 "poor_above": poor,
                 "unit": "" if key in UNITLESS else "millisecond",
+                # How the visits actually split across the bands. A p75 is one point; two
+                # sites can share it with a completely different share of visitors having a
+                # bad time, and the share is what says how many people it is.
+                "distribution": _distribution(pageloads, key, good, poor),
+                # A score is a snapshot. Whether it is drifting is a different question, and
+                # the only one that says whether the last deploy made it worse.
+                "trend": _trend(pageloads, key, win),
             }
             for key, label, explains, good, poor in VITALS
         ],
         "pages": _pages(pageloads),
+        # Real page loads to open. Every other number here is an aggregate, and an aggregate
+        # cannot be debugged — at some point you need one slow load and its trace.
+        "worst": _worst(pageloads),
     }
+
+
+def _distribution(pageloads: Any, key: str, good: float, poor: float) -> dict[str, int]:
+    """Counts per band, in one grouped query rather than three counting queries."""
+    rows = (
+        pageloads.filter(**{f"measurements__{key}__isnull": False})
+        .annotate(measured=JsonNumber("measurements", key))
+        .aggregate(
+            good=Count("id", filter=Q(measured__lte=good)),
+            poor=Count("id", filter=Q(measured__gt=poor)),
+            total=Count("id"),
+        )
+    )
+
+    good_count = rows["good"] or 0
+    poor_count = rows["poor"] or 0
+    total = rows["total"] or 0
+    return {
+        "good": good_count,
+        # The middle band is defined by the two edges, never by a third threshold.
+        "needs_improvement": max(0, total - good_count - poor_count),
+        "poor": poor_count,
+        "total": total,
+    }
+
+
+def _trend(pageloads: Any, key: str, win: Window) -> list[float | None]:
+    """p75 per bucket, at the bucket's own granularity.
+
+    None where nothing was measured, not zero: a bucket with no page loads is a gap, and
+    drawing it as zero would render an outage as a perfect score.
+    """
+    rows = (
+        pageloads.filter(**{f"measurements__{key}__isnull": False})
+        .annotate(bucket=win.truncate())
+        .values("bucket")
+        .annotate(p75=Percentile(JsonNumber("measurements", key), 0.75))
+    )
+    values = {row["bucket"]: _round(key, row["p75"]) for row in rows}
+    return [values.get(bucket) for bucket in win.buckets]
+
+
+def _worst(pageloads: Any) -> list[dict[str, Any]]:
+    """The slowest individual page loads, by LCP."""
+    rows = (
+        pageloads.filter(measurements__lcp__isnull=False)
+        .annotate(lcp=JsonNumber("measurements", "lcp"))
+        .order_by(F("lcp").desc())[:10]
+        .values("id", "name", "lcp", "timestamp", "trace_id", "release", "measurements")
+    )
+
+    return [
+        {
+            "transaction_id": str(row["id"]),
+            "name": row["name"],
+            "lcp": _round("lcp", row["lcp"]),
+            "cls": _round("cls", _measured(row["measurements"], "cls")),
+            "inp": _round("inp", _measured(row["measurements"], "inp")),
+            "timestamp": row["timestamp"],
+            "trace_id": row["trace_id"],
+            "release": row["release"],
+            "rating": rating("lcp", row["lcp"]),
+        }
+        for row in rows
+    ]
+
+
+def _measured(measurements: Any, key: str) -> float | None:
+    entry = (measurements or {}).get(key)
+    return entry.get("value") if isinstance(entry, dict) else None
 
 
 def _pages(pageloads: Any) -> list[dict[str, Any]]:

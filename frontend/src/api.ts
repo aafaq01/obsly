@@ -347,6 +347,8 @@ export interface Release {
 export interface WebVitals {
   period: string
   pageloads: number
+  bucket_seconds: number
+  series_start: string
   vitals: {
     key: string
     label: string
@@ -359,6 +361,11 @@ export interface WebVitals {
     poor_above: number
     /** Empty for CLS: it is a ratio, and labelling it ms would be a lie. */
     unit: string
+    /** How the visits split across the bands. A p75 is one point; the split says how many
+     *  people are actually having a bad time. */
+    distribution: { good: number; needs_improvement: number; poor: number; total: number }
+    /** p75 per bucket. null where nothing was measured — a gap, not a perfect score. */
+    trend: (number | null)[]
   }[]
   pages: {
     name: string
@@ -366,6 +373,18 @@ export interface WebVitals {
     lcp: number | null
     cls: number | null
     inp: number | null
+    rating: string
+  }[]
+  /** Individual slow page loads. An aggregate cannot be debugged. */
+  worst: {
+    transaction_id: string
+    name: string
+    lcp: number | null
+    cls: number | null
+    inp: number | null
+    timestamp: string
+    trace_id: string
+    release: string
     rating: string
   }[]
 }

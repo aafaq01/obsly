@@ -35,6 +35,71 @@ function mockApi(routes: Record<string, Route>) {
   return fetchMock
 }
 
+const VITALS_FIXTURE = {
+  period: '24h',
+  pageloads: 120,
+  bucket_seconds: 3600,
+  series_start: new Date().toISOString(),
+  vitals: [
+    {
+      key: 'lcp',
+      label: 'LCP',
+      explains: 'Largest Contentful Paint — when the main content finished drawing',
+      value: 3200,
+      samples: 120,
+      rating: 'needs-improvement' as const,
+      good_below: 2500,
+      poor_above: 4000,
+      unit: 'millisecond',
+      distribution: { good: 40, needs_improvement: 60, poor: 20, total: 120 },
+      trend: [3200],
+    },
+    {
+      key: 'cls',
+      label: 'CLS',
+      explains: 'Cumulative Layout Shift — how much the page moved under the reader',
+      value: 0.083,
+      samples: 120,
+      rating: 'good' as const,
+      good_below: 0.1,
+      poor_above: 0.25,
+      unit: '',
+      distribution: { good: 110, needs_improvement: 10, poor: 0, total: 120 },
+      trend: [0.083],
+    },
+    {
+      key: 'inp',
+      label: 'INP',
+      explains: 'Interaction to Next Paint — how long the page takes to answer a click',
+      value: null,
+      samples: 0,
+      rating: 'none' as const,
+      good_below: 200,
+      poor_above: 500,
+      unit: 'millisecond',
+      distribution: { good: 0, needs_improvement: 0, poor: 0, total: 0 },
+      trend: [null],
+    },
+  ],
+  worst: [
+    {
+      transaction_id: 'w-1',
+      name: '/checkout',
+      lcp: 7200,
+      cls: 0.31,
+      inp: 620,
+      timestamp: new Date(Date.now() - 300_000).toISOString(),
+      trace_id: 'a'.repeat(32),
+      release: 'web@1.0.0',
+      rating: 'poor',
+    },
+  ],
+  pages: [
+    { name: '/checkout', count: 40, lcp: 5200, cls: 0.2, inp: null, rating: 'poor' },
+    { name: '/', count: 80, lcp: 1100, cls: 0.01, inp: 90, rating: 'good' },
+  ],
+}
+
 const DB_STATEMENT = {
   description: 'SELECT 1 FROM carts',
   op: 'db.query',
@@ -1885,50 +1950,6 @@ describe('Alerts', () => {
 })
 
 describe('Web Vitals', () => {
-  const VITALS = {
-    period: '24h',
-    pageloads: 120,
-    vitals: [
-      {
-        key: 'lcp',
-        label: 'LCP',
-        explains: 'Largest Contentful Paint — when the main content finished drawing',
-        value: 3200,
-        samples: 120,
-        rating: 'needs-improvement' as const,
-        good_below: 2500,
-        poor_above: 4000,
-        unit: 'millisecond',
-      },
-      {
-        key: 'cls',
-        label: 'CLS',
-        explains: 'Cumulative Layout Shift — how much the page moved under the reader',
-        value: 0.083,
-        samples: 120,
-        rating: 'good' as const,
-        good_below: 0.1,
-        poor_above: 0.25,
-        unit: '',
-      },
-      {
-        key: 'inp',
-        label: 'INP',
-        explains: 'Interaction to Next Paint — how long the page takes to answer a click',
-        value: null,
-        samples: 0,
-        rating: 'none' as const,
-        good_below: 200,
-        poor_above: 500,
-        unit: 'millisecond',
-      },
-    ],
-    pages: [
-      { name: '/checkout', count: 40, lcp: 5200, cls: 0.2, inp: null, rating: 'poor' },
-      { name: '/', count: 80, lcp: 1100, cls: 0.01, inp: 90, rating: 'good' },
-    ],
-  }
-
   function mount(body: unknown) {
     mockApi({
       '/me/': { body: { authenticated: true, username: 'admin' } },
@@ -1945,13 +1966,13 @@ describe('Web Vitals', () => {
 
   it('says a vital was never reported rather than showing it as passing', async () => {
     // Green because nothing was measured is the most dangerous reading this page can give.
-    mount(VITALS)
+    mount(VITALS_FIXTURE)
 
     expect(await screen.findByText('no data')).toBeInTheDocument()
   })
 
   it('keeps CLS as a ratio rather than labelling it milliseconds', async () => {
-    mount(VITALS)
+    mount(VITALS_FIXTURE)
 
     expect(await screen.findByText('0.083')).toBeInTheDocument()
     expect(screen.queryByText('0.083ms')).not.toBeInTheDocument()
@@ -1959,22 +1980,24 @@ describe('Web Vitals', () => {
 
   it('states the thresholds instead of leaving them to the colour', async () => {
     // A reader who does not already know the bands cannot act on a green box.
-    mount(VITALS)
+    mount(VITALS_FIXTURE)
 
     expect(await screen.findByText(/good ≤ 2\.50s · poor > 4\.00s/)).toBeInTheDocument()
   })
 
   it('ranks pages by their worst LCP, not by traffic', async () => {
-    mount(VITALS)
+    mount(VITALS_FIXTURE)
 
-    await screen.findByText('/checkout')
-    const rows = document.querySelectorAll('tbody tr')
+    await screen.findAllByText('/checkout')
+    // The last table on the page is the per-page ranking; the first is individual loads.
+    const tables = document.querySelectorAll('table')
+    const rows = tables[tables.length - 1]!.querySelectorAll('tbody tr')
     // /checkout has half the traffic of / and comes first.
     expect(rows[0]!.textContent).toContain('/checkout')
   })
 
   it('explains where the numbers come from when there are none', async () => {
-    mount({ ...VITALS, pageloads: 0, pages: [] })
+    mount({ ...VITALS_FIXTURE, pageloads: 0, pages: [], worst: [] })
 
     expect(await screen.findByText(/browser SDK/)).toBeInTheDocument()
   })
@@ -2355,5 +2378,65 @@ describe('Trace waterfall grouping', () => {
     )
 
     expect(await screen.findAllByText('3×')).toHaveLength(2)
+  })
+})
+
+describe('Web Vitals depth', () => {
+  it('shows how the visits split across the bands, not just the p75', async () => {
+    // Two sites can share a p75 while a completely different share of visitors is having a bad
+    // time, and the share is what says how many people that is.
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/': { body: [PROJECT] },
+      '/projects/1/': { body: { ...PROJECT, keys: [] } },
+      '/projects/1/vitals/': { body: VITALS_FIXTURE },
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/projects/1/insights/frontend']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    // 40 of 120 good, 20 of 120 poor.
+    expect(await screen.findByText(/33% good · 17% poor · 120 visits/)).toBeInTheDocument()
+  })
+
+  it('offers individual slow loads, because an aggregate cannot be debugged', async () => {
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/': { body: [PROJECT] },
+      '/projects/1/': { body: { ...PROJECT, keys: [] } },
+      '/projects/1/vitals/': { body: VITALS_FIXTURE },
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/projects/1/insights/frontend']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    const link = await screen.findByRole('link', { name: '/checkout' })
+    expect(link).toHaveAttribute('href', '/projects/1/traces/w-1')
+  })
+
+  it('draws no band split for a vital nobody reported', async () => {
+    // An empty bar reads as "all good"; the card already says "no data".
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/': { body: [PROJECT] },
+      '/projects/1/': { body: { ...PROJECT, keys: [] } },
+      '/projects/1/vitals/': { body: VITALS_FIXTURE },
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/projects/1/insights/frontend']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    await screen.findByText('no data')
+    // Three vitals in the fixture, one of them unmeasured.
+    expect(document.querySelectorAll('.bands')).toHaveLength(2)
   })
 })
