@@ -1951,3 +1951,90 @@ a.rank__row:hover .rank__name {
   color: var(--status-critical);
   border-color: color-mix(in srgb, var(--status-critical) 40%, transparent);
 }
+
+/* Web vitals: one card per metric, rated against the standard's own thresholds. */
+.vitals {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+  margin-bottom: 28px;
+}
+.vital {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 14px 16px;
+  /* The rating reads off the left edge, so a row of cards is scannable without reading a
+     single number. */
+  border-left: 3px solid var(--ink-muted);
+}
+.vital--good {
+  border-left-color: var(--status-good);
+}
+.vital--needs-improvement {
+  border-left-color: var(--status-warning);
+}
+.vital--poor {
+  border-left-color: var(--status-critical);
+}
+.vital__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.vital__label {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.vital__value {
+  font-size: 28px;
+  font-weight: 600;
+  margin: 6px 0 2px;
+  font-variant-numeric: tabular-nums;
+}
+.vital__explains,
+.vital__bands {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-muted);
+}
+.vital__bands {
+  font-variant-numeric: tabular-nums;
+}
+
+.tag--good {
+  color: var(--status-good);
+  border-color: color-mix(in srgb, var(--status-good) 40%, transparent);
+}
+.tag--needs-improvement {
+  color: var(--status-warning);
+  border-color: color-mix(in srgb, var(--status-warning) 40%, transparent);
+}
+.tag--poor {
+  color: var(--status-critical);
+  border-color: color-mix(in srgb, var(--status-critical) 40%, transparent);
+}
+.tag--none {
+  color: var(--ink-muted);
+}
+
+/* Colour is never the only signal, but in a dense table a dot is the fastest one. */
+.dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  margin-right: 8px;
+  background: var(--ink-muted);
+}
+.dot--good {
+  background: var(--status-good);
+}
+.dot--needs-improvement {
+  background: var(--status-warning);
+}
+.dot--poor {
+  background: var(--status-critical);
+}

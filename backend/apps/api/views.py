@@ -46,6 +46,7 @@ from apps.api.serializers import (
     TransactionSerializer,
 )
 from apps.api.timewindow import PERIODS, Window, resolve
+from apps.api.vitals import summary as vitals_summary
 from apps.events.models import Event
 from apps.issues.models import Issue, IssueStatus
 from apps.logs.models import LogLevel, LogRecord
@@ -608,3 +609,10 @@ class AlertRuleTestView(APIView):
         send_now(fire)
         fire.refresh_from_db()
         return Response(AlertFireSerializer(fire).data, status=status.HTTP_201_CREATED)
+
+
+class WebVitalsView(APIView):
+    """Core Web Vitals for one project, at p75 and against the standard thresholds."""
+
+    def get(self, request: Request, project_id: int) -> Response:
+        return Response(vitals_summary(project_id, request.query_params.get("period", "24h")))

@@ -282,6 +282,32 @@ export interface TagValue {
   percentage: number
 }
 
+export interface WebVitals {
+  period: string
+  pageloads: number
+  vitals: {
+    key: string
+    label: string
+    explains: string
+    /** null when nobody reported it — which is not the same as a passing score. */
+    value: number | null
+    samples: number
+    rating: 'good' | 'needs-improvement' | 'poor' | 'none'
+    good_below: number
+    poor_above: number
+    /** Empty for CLS: it is a ratio, and labelling it ms would be a lie. */
+    unit: string
+  }[]
+  pages: {
+    name: string
+    count: number
+    lcp: number | null
+    cls: number | null
+    inp: number | null
+    rating: string
+  }[]
+}
+
 export type AlertTrigger = 'new_issue' | 'regression' | 'frequency'
 
 export interface AlertRule {
@@ -437,6 +463,8 @@ export const api = {
   deleteAlertRule: (id: number) => send<null>(`/alert-rules/${id}/`, 'DELETE'),
   testAlertRule: (id: number) => send<AlertFire>(`/alert-rules/${id}/test/`, 'POST'),
   alerts: (projectId: number) => get<AlertFire[]>(`/projects/${projectId}/alerts/`),
+  vitals: (projectId: number, period: string) =>
+    get<WebVitals>(`/projects/${projectId}/vitals/?period=${period}`),
   traces: (projectId: number, params: URLSearchParams) =>
     get<TraceSummary[]>(`/projects/${projectId}/traces/?${params.toString()}`),
   trace: (id: string) => get<TraceDetail>(`/traces/${id}/`),

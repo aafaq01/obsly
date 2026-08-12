@@ -46,6 +46,12 @@ class Transaction(TimestampedModel):
     environment = models.CharField(max_length=64, blank=True, db_index=True)
     release = models.CharField(max_length=128, blank=True, db_index=True)
 
+    # Web vitals and anything else measured about the page, as {name: {value, unit}}.
+    # A column rather than a dig into `payload`, because these are aggregated across millions
+    # of rows — a JSON path expression per row is the scan the extracted columns exist to
+    # avoid.
+    measurements = models.JSONField(default=dict)
+
     payload = models.JSONField()
 
     class Meta:

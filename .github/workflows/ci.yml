@@ -129,6 +129,46 @@ jobs:
           echo "declared runtime dependencies: $deps"
           test "$deps" = "[]"
 
+  sdk-browser:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdk/browser
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: sdk/browser/package-lock.json
+
+      - run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Format
+        run: npm run format:check
+
+      - name: Types
+        run: npm run typecheck
+
+      - name: Tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: No runtime dependencies
+        run: |
+          # Same promise as the Python SDK: adding this to a page must not be able to break it
+          # through a version conflict, and it must not add a byte the page did not ask for.
+          deps=$(node -p "JSON.stringify(require('./package.json').dependencies ?? {})")
+          echo "declared runtime dependencies: $deps"
+          test "$deps" = "{}"
+
   stack:
     # The README promises `docker compose up` works. Without this job that promise rots the
     # first time someone edits a Dockerfile, and nobody finds out until they try to run it.

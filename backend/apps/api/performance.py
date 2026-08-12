@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import Any
 
 from django.db.models import Aggregate, Count, F, FloatField, Max, Q, QuerySet, Sum, Value
+from django.db.models.expressions import Combinable
 from django.db.models.functions import Floor, Least
 
 from apps.api.timewindow import resolve
@@ -27,7 +28,7 @@ class Percentile(Aggregate):
     template = "%(function)s(%(percentile)s) WITHIN GROUP (ORDER BY %(expressions)s)"
     output_field = FloatField()
 
-    def __init__(self, expression: str, percentile: float, **extra: Any) -> None:
+    def __init__(self, expression: str | Combinable, percentile: float, **extra: Any) -> None:
         super().__init__(expression, percentile=percentile, **extra)
 
 
