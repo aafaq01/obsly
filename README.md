@@ -53,6 +53,12 @@ docker compose up --build -d
 Migrations run automatically on backend start. `docker compose down` stops it; add `-v` to drop
 the database volume too.
 
+**First run.** An install with no users opens on a registration form, and the first account
+created owns the instance. Registration then closes: an endpoint that hands out accounts to
+whoever can reach it is not a sign-up form for a tool holding your production stack traces,
+queries and logs. Set `OBSLY_ALLOW_SIGNUP=True` to keep it open for a team — a decision with a
+name rather than a default.
+
 The stack sets `DJANGO_DEBUG=False` for production-like behaviour but `DJANGO_HTTPS=False`,
 because it serves plain HTTP — without that, the SSL redirect would bounce every request and
 `Secure` cookies would never reach the browser. Never set `DJANGO_HTTPS=False` on anything

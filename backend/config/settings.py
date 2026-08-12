@@ -131,6 +131,10 @@ OBSLY_MAX_ENVELOPE_BYTES = env.int("OBSLY_MAX_ENVELOPE_BYTES", default=1_000_000
 # Redact secret-named keys and secret-shaped values before anything is written. On by default:
 # an installation that has to remember to turn scrubbing on is an installation that stores a
 # credential the first time somebody forgets. Turning it off is a decision with a name.
+# Registration closes as soon as the install has an owner. Keeping it open lets anyone who
+# can reach the URL read production stack traces, so it is a decision with a name.
+OBSLY_ALLOW_SIGNUP = env.bool("OBSLY_ALLOW_SIGNUP", default=False)
+
 OBSLY_SCRUB_SECRETS = env.bool("OBSLY_SCRUB_SECRETS", default=True)
 
 # Alerting. Off is a decision with a name rather than a rule nobody notices is dead.

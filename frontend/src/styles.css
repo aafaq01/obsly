@@ -2645,3 +2645,25 @@ button.danger:hover {
 .bands__part--poor {
   background: var(--status-critical);
 }
+
+/* What the first account is for, before somebody types a password into it. */
+.login__lede {
+  margin: -4px 0 4px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink-secondary);
+}
+
+/* Between sign-in and register. A link in weight, a button in behaviour — it changes what
+   this form does rather than navigating anywhere. */
+.login__switch {
+  background: none;
+  border: none;
+  padding: 4px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--series-1);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}

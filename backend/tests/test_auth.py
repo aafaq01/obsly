@@ -37,7 +37,14 @@ class TestSession:
         response = client.get(reverse("api:me"), secure=True)
 
         assert response.status_code == 200
-        assert json_body(response) == {"authenticated": False, "username": None}
+        # signup_open rides along: the sign-in screen has to know whether to offer registration,
+        # and a fresh install has to show a register form rather than a login nobody can
+        # satisfy.
+        assert json_body(response) == {
+            "authenticated": False,
+            "username": None,
+            "signup_open": True,
+        }
 
     def test_sets_a_csrf_cookie_for_anonymous_callers(self, client: Client) -> None:
         response = client.get(reverse("api:me"), secure=True)

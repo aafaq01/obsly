@@ -2510,3 +2510,79 @@ describe('Suspect feature flags', () => {
     expect(screen.queryByText('Feature flags')).not.toBeInTheDocument()
   })
 })
+
+describe('First-run registration', () => {
+  it('opens on the register form when nobody owns the install', async () => {
+    // A sign-in form on an install with no users is a door with no key cut for it. The
+    // alternative was telling people to run createsuperuser inside a container.
+    mockApi({ '/me/': { body: { authenticated: false, username: null, signup_open: true } } })
+
+    renderApp()
+
+    expect(await screen.findByRole('heading', { name: 'Create your account' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Create account' })).toBeInTheDocument()
+  })
+
+  it('says what the first account is for before a password is typed into it', async () => {
+    mockApi({ '/me/': { body: { authenticated: false, username: null, signup_open: true } } })
+
+    renderApp()
+
+    expect(await screen.findByText(/first account gets full access/)).toBeInTheDocument()
+  })
+
+  it('shows a sign-in form once the install has an owner', async () => {
+    mockApi({ '/me/': { body: { authenticated: false, username: null, signup_open: false } } })
+
+    renderApp()
+
+    expect(await screen.findByRole('heading', { name: /Sign in to Obsly/ })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Create an account/ })).not.toBeInTheDocument()
+  })
+
+  it('creates the account and lands signed in', async () => {
+    mockApi({
+      '/me/': { body: { authenticated: false, username: null, signup_open: true } },
+      '/auth/register/': { status: 201, body: { authenticated: true, username: 'ada' } },
+      '/projects/': { body: [PROJECT] },
+      '/projects/1/issues/': { body: [ISSUE] },
+    })
+
+    renderApp()
+
+    await userEvent.type(await screen.findByLabelText('Username'), 'ada')
+    await userEvent.type(screen.getByLabelText('Password'), 'correct-horse-battery-7')
+    await userEvent.click(screen.getByRole('button', { name: 'Create account' }))
+
+    expect(await screen.findByText('ValueError: cart is empty')).toBeInTheDocument()
+  })
+
+  it('says why a password was refused rather than that it was invalid', async () => {
+    // The validator already wrote the sentence. "Invalid password" sends somebody to guess.
+    mockApi({
+      '/me/': { body: { authenticated: false, username: null, signup_open: true } },
+      '/auth/register/': {
+        status: 400,
+        body: { detail: 'This password is too short. It must contain at least 8 characters.' },
+      },
+    })
+
+    renderApp()
+
+    await userEvent.type(await screen.findByLabelText('Username'), 'ada')
+    await userEvent.type(screen.getByLabelText('Password'), 'short')
+    await userEvent.click(screen.getByRole('button', { name: 'Create account' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('at least 8 characters')
+  })
+
+  it('asks for a new password, not the browser’s saved one', async () => {
+    // autoComplete=current-password on a create form makes the manager offer the password
+    // being replaced.
+    mockApi({ '/me/': { body: { authenticated: false, username: null, signup_open: true } } })
+
+    renderApp()
+
+    expect(await screen.findByLabelText('Password')).toHaveAttribute('autocomplete', 'new-password')
+  })
+})
