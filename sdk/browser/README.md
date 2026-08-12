@@ -1,13 +1,13 @@
-# @obsly/browser
+# obsly-browser
 
 The browser half of Obsly. Errors, Core Web Vitals, and traces that join up with the backend.
 
 ```bash
-npm install @obsly/browser
+npm install obsly-browser
 ```
 
 ```ts
-import { init } from '@obsly/browser'
+import { init } from 'obsly-browser'
 
 init({
   dsn: 'https://<public key>@localhost:8081/1',
@@ -68,7 +68,7 @@ turned off.
 ## Reporting an error yourself
 
 ```ts
-import { captureException } from '@obsly/browser'
+import { captureException } from 'obsly-browser'
 
 try {
   await checkout()

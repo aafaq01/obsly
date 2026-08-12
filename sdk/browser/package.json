@@ -1,7 +1,29 @@
 {
-  "name": "@obsly/browser",
+  "name": "obsly-browser",
   "version": "0.1.0",
-  "description": "Obsly browser SDK \u2014 errors, web vitals and traces that join up with the backend",
+  "description": "Obsly browser SDK \u2014 errors, Core Web Vitals and traces that join up with the backend",
+  "license": "MIT",
+  "author": "Aafaq Rana <m.aafaq.rana@gmail.com>",
+  "homepage": "https://github.com/aafaq01/obsly/tree/main/sdk/browser#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aafaq01/obsly.git",
+    "directory": "sdk/browser"
+  },
+  "bugs": {
+    "url": "https://github.com/aafaq01/obsly/issues"
+  },
+  "keywords": [
+    "observability",
+    "error-tracking",
+    "web-vitals",
+    "tracing",
+    "apm",
+    "monitoring",
+    "rum",
+    "browser",
+    "performance"
+  ],
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -13,15 +35,21 @@
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md",
+    "LICENSE"
   ],
   "sideEffects": false,
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "lint": "eslint .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "prepublishOnly": "npm run lint && npm run typecheck && npm test && npm run build"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

@@ -64,6 +64,10 @@ Two SDKs, one wire protocol and one trace.
 
 **Backend** ([sdk/python](sdk/python)) — zero runtime dependencies:
 
+```bash
+pip install obsly
+```
+
 ```python
 import obsly
 obsly.init(dsn="https://<public key>@localhost:8081/1", release="api@2026.08.12")
@@ -71,8 +75,12 @@ obsly.init(dsn="https://<public key>@localhost:8081/1", release="api@2026.08.12"
 
 **Browser** ([sdk/browser](sdk/browser)) — zero runtime dependencies:
 
+```bash
+npm install obsly-browser
+```
+
 ```ts
-import { init } from '@obsly/browser'
+import { init } from 'obsly-browser'
 init({ dsn: 'https://<public key>@localhost:8081/1', release: 'web@2026.08.12' })
 ```
 

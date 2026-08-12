@@ -58,7 +58,7 @@ export function Vitals() {
         <div className="card card--tight">
           <p className="logs__empty">
             No page loads reported yet. These come from the browser SDK — add{' '}
-            <code>@obsly/browser</code> to the frontend and they will appear here.
+            <code>obsly-browser</code> to the frontend and they will appear here.
           </p>
         </div>
       ) : (
