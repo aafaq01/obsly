@@ -3,7 +3,7 @@ name = "obsly-fastapi-demo"
 version = "0.1.0"
 description = "A FastAPI app that fails on purpose, to exercise Obsly"
 requires-python = ">=3.11"
-dependencies = ["fastapi>=0.115", "uvicorn>=0.32", "obsly>=0.1.1"]
+dependencies = ["fastapi>=0.115", "uvicorn>=0.32", "obsly>=0.2.0"]
 
 [tool.ruff]
 target-version = "py311"
