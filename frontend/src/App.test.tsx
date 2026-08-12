@@ -510,7 +510,7 @@ describe('Performance page', () => {
 
   function renderPerf() {
     return render(
-      <MemoryRouter initialEntries={['/projects/1/performance']}>
+      <MemoryRouter initialEntries={['/projects/1/insights/backend']}>
         <App />
       </MemoryRouter>,
     )
@@ -969,11 +969,12 @@ describe('Navigation', () => {
     expect(await screen.findByRole('heading', { name: 'Projects' })).toBeInTheDocument()
   })
 
-  it('shows every project tab once inside a project', async () => {
-    // These rendered nothing before: the tab bar sat outside <Routes>, so useParams returned
-    // an empty object and every page it linked to was unreachable.
+  it('reaches every section from the sidebar', async () => {
+    // These rendered nothing before the shell existed: the tab bar sat outside <Routes>, so
+    // useParams returned an empty object and every page it linked to was unreachable.
     mockApi({
       '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/': { body: [PROJECT] },
       '/projects/1/': { body: { ...PROJECT, keys: [] } },
       '/projects/1/issues/': { body: [] },
     })
@@ -984,22 +985,30 @@ describe('Navigation', () => {
       </MemoryRouter>,
     )
 
-    for (const tab of [
-      'Overview',
+    for (const item of [
       'Issues',
-      'Performance',
+      'Dashboard',
       'Traces',
-      'Spans',
       'Logs',
+      'Frontend',
+      'Backend',
+      'Database',
+      'Cache',
+      'Releases',
+      'Alerts',
       'Settings',
+      'Projects',
     ]) {
-      expect(await screen.findByRole('link', { name: tab })).toBeInTheDocument()
+      expect(await screen.findByRole('link', { name: item })).toBeInTheDocument()
     }
   })
 
-  it('names the project in the tab bar', async () => {
+  it('groups the sections rather than listing twelve of them flat', async () => {
+    // A flat list of twelve destinations is a list nobody reads, and it put Spans and Settings
+    // at the same level.
     mockApi({
       '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/': { body: [PROJECT] },
       '/projects/1/': { body: { ...PROJECT, keys: [] } },
       '/projects/1/issues/': { body: [] },
     })
@@ -1010,37 +1019,35 @@ describe('Navigation', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByText('Checkout')).toBeInTheDocument()
+    expect(await screen.findByText('Explore')).toBeInTheDocument()
+    expect(screen.getByText('Insights')).toBeInTheDocument()
   })
 
-  it('a bare project url opens the overview', async () => {
+  it('names the project in the filter bar', async () => {
     mockApi({
       '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/': { body: [PROJECT] },
       '/projects/1/': { body: { ...PROJECT, keys: [] } },
-      '/projects/1/dashboard/': {
-        body: {
-          period: '24h',
-          buckets: 24,
-          headline: {
-            transactions: 5,
-            throughput_per_minute: 0.1,
-            failure_rate: 0,
-            p95_ms: 12,
-            errors: 0,
-            unresolved_issues: 0,
-            logs: 0,
-          },
-          series: {
-            throughput: [5],
-            failures: [0],
-            errors: [0],
-            logs: [0],
-            p95: [12],
-          },
-          top_issues: [],
-          slowest_endpoints: [],
-        },
-      },
+      '/projects/1/issues/': { body: [] },
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/projects/1/issues']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByLabelText('Project')).toHaveValue('1')
+  })
+
+  it('a bare project url opens the issue stream', async () => {
+    // Issues, the way Sentry lands. The question you open an observability tool to ask is
+    // "what is broken", not "what are the averages".
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/': { body: [PROJECT] },
+      '/projects/1/': { body: { ...PROJECT, keys: [] } },
+      '/projects/1/issues/': { body: [ISSUE] },
     })
 
     render(
@@ -1049,7 +1056,26 @@ describe('Navigation', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByRole('heading', { name: 'Overview' })).toBeInTheDocument()
+    expect(await screen.findByText('ValueError: cart is empty')).toBeInTheDocument()
+  })
+
+  it('an old bookmarked tab url still lands where it meant to', async () => {
+    // /vitals, /performance and /spans were the names before Insights existed. A link in an
+    // old incident channel must not 404 into the project list.
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/': { body: [PROJECT] },
+      '/projects/1/': { body: { ...PROJECT, keys: [] } },
+      '/projects/1/vitals/': { body: { period: '24h', pageloads: 0, vitals: [], pages: [] } },
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/projects/1/vitals']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByRole('heading', { name: 'Web Vitals' })).toBeInTheDocument()
   })
 })
 
@@ -1369,7 +1395,7 @@ describe('Rank charts', () => {
 
   function renderPerf() {
     return render(
-      <MemoryRouter initialEntries={['/projects/1/performance']}>
+      <MemoryRouter initialEntries={['/projects/1/insights/backend']}>
         <App />
       </MemoryRouter>,
     )
@@ -1416,7 +1442,7 @@ describe('Rank charts', () => {
     })
 
     render(
-      <MemoryRouter initialEntries={['/projects/1/performance?period=7d']}>
+      <MemoryRouter initialEntries={['/projects/1/insights/backend?period=7d']}>
         <App />
       </MemoryRouter>,
     )
@@ -1607,7 +1633,7 @@ describe('Review findings', () => {
     })
 
     render(
-      <MemoryRouter initialEntries={['/projects/1/performance']}>
+      <MemoryRouter initialEntries={['/projects/1/insights/backend']}>
         <App />
       </MemoryRouter>,
     )
@@ -2008,5 +2034,99 @@ describe('Releases', () => {
     mount([])
 
     expect(await screen.findByText(/No tagged traffic/)).toBeInTheDocument()
+  })
+})
+
+describe('Insights layers', () => {
+  const SPANS = {
+    period: '24h',
+    ops: ['db.query', 'http.client', 'cache.get'],
+    spans: [
+      {
+        op: 'http.client',
+        description: 'POST payments.example.com/charge',
+        count: 40,
+        transactions: 40,
+        per_transaction: 1,
+        throughput_per_minute: 0.02,
+        total_ms: 13370,
+        p50: 300,
+        p95: 900,
+      },
+      {
+        op: 'db.query',
+        description: 'SELECT * FROM carts WHERE id = %s',
+        count: 120,
+        transactions: 60,
+        per_transaction: 2,
+        throughput_per_minute: 0.08,
+        total_ms: 1570,
+        p50: 11,
+        p95: 24,
+      },
+      {
+        op: 'cache.get',
+        description: 'search:results',
+        count: 65,
+        transactions: 65,
+        per_transaction: 1,
+        throughput_per_minute: 0.04,
+        total_ms: 90,
+        p50: 1,
+        p95: 3,
+      },
+    ],
+  }
+
+  function mount(path: string) {
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/': { body: [PROJECT] },
+      '/projects/1/': { body: { ...PROJECT, keys: [] } },
+      '/projects/1/spans/': { body: SPANS },
+    })
+
+    render(
+      <MemoryRouter initialEntries={[path]}>
+        <App />
+      </MemoryRouter>,
+    )
+  }
+
+  it('the Database page shows only database spans', async () => {
+    // A nav item called Database that lists http.client makes the whole grouping a lie.
+    mount('/projects/1/insights/database')
+
+    expect(await screen.findByRole('heading', { name: 'Database' })).toBeInTheDocument()
+    // Twice over: the ranked chart and the table below it both list it.
+    expect(screen.getAllByText('SELECT * FROM carts WHERE id = %s').length).toBeGreaterThan(0)
+    expect(screen.queryAllByText('POST payments.example.com/charge')).toHaveLength(0)
+    expect(screen.queryAllByText('search:results')).toHaveLength(0)
+  })
+
+  it('the Database operation filter offers only database operations', async () => {
+    // A filter listing ops the page will never show is a control that does nothing.
+    mount('/projects/1/insights/database')
+
+    await screen.findByRole('heading', { name: 'Database' })
+    const options = [...document.querySelectorAll('option')].map((o) => o.textContent)
+    expect(options).toContain('db.query')
+    expect(options).not.toContain('http.client')
+  })
+
+  it('the Cache page shows only cache spans', async () => {
+    mount('/projects/1/insights/cache')
+
+    expect(await screen.findByRole('heading', { name: 'Cache' })).toBeInTheDocument()
+    expect(screen.getAllByText('search:results').length).toBeGreaterThan(0)
+    expect(screen.queryAllByText('SELECT * FROM carts WHERE id = %s')).toHaveLength(0)
+  })
+
+  it('the Cache page says hit rate is missing rather than implying it is fine', async () => {
+    // A cache page with no hit rate looks like a cache that is working; it is a cache nobody
+    // measured.
+    mount('/projects/1/insights/cache')
+
+    expect(await screen.findByText(/Hit rate is not being reported/)).toBeInTheDocument()
   })
 })

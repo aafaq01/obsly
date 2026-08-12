@@ -4,7 +4,6 @@ import { useParams, useSearchParams } from 'react-router-dom'
 import { api, type LogRecord } from '../api'
 import { LogList } from '../components/LogList'
 import { Notice, Skeleton } from '../components/Notice'
-import { PeriodPicker } from '../components/PeriodPicker'
 import { handle } from '../errors'
 
 // Worst last, matching the server's ordering.
@@ -78,7 +77,6 @@ export function Logs() {
           onChange={(event) => setQuery(event.target.value)}
           aria-label="Search logs"
         />
-        <PeriodPicker value={period} onChange={(next) => update('period', next)} />
       </div>
 
       {/* Toggles rather than a dropdown. "warning and worse" and "only warnings" are different
@@ -108,7 +106,6 @@ export function Logs() {
             </button>
           )
         })}
-        <PeriodPicker value={period} onChange={(next) => update('period', next)} />
       </div>
 
       {records === null ? (

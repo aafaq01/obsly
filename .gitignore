@@ -39,3 +39,6 @@ graphify-out/
 
 # Playwright MCP scratch output — snapshots and console logs from driving the app.
 .playwright-mcp/
+
+# Per-machine Claude Code settings (absolute local paths, personal hooks).
+.claude/settings.local.json

@@ -69,6 +69,19 @@ class OrganizationListView(generics.ListCreateAPIView[Organization]):
     queryset = Organization.objects.all()
 
 
+class OrganizationDetailView(generics.RetrieveUpdateAPIView[Organization]):
+    """Renaming, mostly.
+
+    The organisation is the ownership boundary every project hangs off, so it cannot be
+    deleted out from under them — but the name is a label a person chose, and a tool that
+    makes you live with a name somebody else picked is a tool that feels like somebody
+    else's.
+    """
+
+    serializer_class = OrganizationSerializer
+    queryset = Organization.objects.all()
+
+
 class ProjectListView(generics.ListCreateAPIView[Project]):
     serializer_class = ProjectSerializer
 
