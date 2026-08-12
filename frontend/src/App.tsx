@@ -17,6 +17,7 @@ import { Projects } from './pages/Projects'
 import { Queries } from './pages/Queries'
 import { SpanDetail } from './pages/SpanDetail'
 import { TraceDetail } from './pages/TraceDetail'
+import { Releases } from './pages/Releases'
 import { Traces } from './pages/Traces'
 import { Vitals } from './pages/Vitals'
 
@@ -91,6 +92,7 @@ export function App() {
               <Route path="logs" element={<Logs />} />
               <Route path="alerts" element={<Alerts />} />
               <Route path="vitals" element={<Vitals />} />
+              <Route path="releases" element={<Releases />} />
               <Route path="settings" element={<ProjectSettings />} />
 
               {/* Detail pages live under the layout too, so opening an issue does not drop you

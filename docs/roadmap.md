@@ -37,6 +37,7 @@ linters and type checks are green in CI.
 | 28 | `feat/alerts` | New-issue, regression and frequency rules with webhook delivery |
 | 29 | `feat/sdk-browser` | Browser SDK: errors, Core Web Vitals, one trace from paint to query |
 | 30 | `feat/browser-demo` | A demo page that reports itself, so the browser half is clickable |
+| 31 | `feat/releases` | Per-release health, adoption, and which version introduced an issue |
 
 ## Planned
 
@@ -46,7 +47,7 @@ already run into.
 | Branch | Delivers | Why it matters |
 |---|---|---|
 | `feat/metrics` | Custom counters, gauges and distributions | See "on metrics" below — the shape of this is a real decision, not just work |
-| `feat/releases` | Release health, crash-free rate, suspect commits | `release` is already on every signal; nothing aggregates by it yet |
+| `feat/sessions` | Session reporting, and crash-free users on top of it | Release health reports failure-free *requests* today. Crash-free rate is defined over sessions, and borrowing the name without them would be a number people compare wrongly |
 | `feat/teams` | Membership, roles, per-project access | Every signed-in user currently sees every project |
 | `feat/quotas` | Per-project rate limits, spike protection | One runaway loop can currently fill the database — and now also fire an alert per event until its cooldown catches it |
 | `feat/source-maps` | Upload and apply source maps to browser stack traces | The browser SDK reports minified frames today, and `a.js:1:48291` names no line anyone can open |

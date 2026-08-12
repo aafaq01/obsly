@@ -1932,3 +1932,81 @@ describe('Web Vitals', () => {
     expect(await screen.findByText(/browser SDK/)).toBeInTheDocument()
   })
 })
+
+describe('Releases', () => {
+  const RELEASES = [
+    {
+      version: 'api@2.0.0',
+      requests: 800,
+      failure_free_rate: 0.9712,
+      failures: 23,
+      p95: 420,
+      errors: 61,
+      issues_introduced: 3,
+      issues_unresolved: 2,
+      adoption: 0.8,
+      first_seen: new Date(Date.now() - 3600_000).toISOString(),
+      last_seen: new Date(Date.now() - 60_000).toISOString(),
+    },
+    {
+      version: 'api@1.9.0',
+      requests: 200,
+      failure_free_rate: 0.9995,
+      failures: 0,
+      p95: 180,
+      errors: 1,
+      issues_introduced: 0,
+      issues_unresolved: 0,
+      adoption: 0.2,
+      first_seen: new Date(Date.now() - 86_400_000).toISOString(),
+      last_seen: new Date(Date.now() - 7200_000).toISOString(),
+    },
+  ]
+
+  function mount(releases: unknown[]) {
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/1/': { body: { ...PROJECT, keys: [] } },
+      '/projects/1/releases/': { body: { period: '24h', releases } },
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/projects/1/releases']}>
+        <App />
+      </MemoryRouter>,
+    )
+  }
+
+  it('shows each version separately rather than averaging them', async () => {
+    // The whole point: a bad deploy must be visible next to the good one it replaced.
+    mount(RELEASES)
+
+    expect(await screen.findByText('api@2.0.0')).toBeInTheDocument()
+    expect(screen.getByText('api@1.9.0')).toBeInTheDocument()
+    expect(screen.getByText('97.12%')).toBeInTheDocument()
+    expect(screen.getByText('99.95%')).toBeInTheDocument()
+  })
+
+  it('marks a bad release differently from a healthy one', async () => {
+    mount(RELEASES)
+
+    expect(await screen.findByText('97.12%')).toHaveClass('health--bad')
+    expect(screen.getByText('99.95%')).toHaveClass('health--good')
+  })
+
+  it('does not call the rate crash-free', async () => {
+    // Sentry's crash-free rate is measured over sessions. Borrowing the name for a
+    // request-based number invites a comparison that is wrong every time.
+    mount(RELEASES)
+
+    await screen.findByText('api@2.0.0')
+    expect(screen.queryByText(/crash.free/i)).not.toBeInTheDocument()
+    expect(screen.getByText('Failure-free')).toBeInTheDocument()
+  })
+
+  it('says how to get data rather than just showing nothing', async () => {
+    mount([])
+
+    expect(await screen.findByText(/No tagged traffic/)).toBeInTheDocument()
+  })
+})

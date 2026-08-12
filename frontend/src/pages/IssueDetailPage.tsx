@@ -50,6 +50,9 @@ export function IssueDetailPage() {
         <Meta label="Level" value={issue.level} />
         <Meta label="First seen" value={relativeTime(issue.first_seen)} />
         <Meta label="Last seen" value={relativeTime(issue.last_seen)} />
+        {/* Where the bug came from. The first question after "what broke" is "what did we
+            change", and this is the only field that answers it. */}
+        {issue.first_release && <Meta label="Introduced in" value={issue.first_release} />}
         {event?.release && <Meta label="Release" value={event.release} />}
         {event?.environment && <Meta label="Environment" value={event.environment} />}
       </dl>

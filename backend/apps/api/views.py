@@ -30,6 +30,7 @@ from apps.api.performance import (
     span_summary,
     window,
 )
+from apps.api.releases import summary as releases_summary
 from apps.api.serializers import (
     AlertFireSerializer,
     AlertRuleSerializer,
@@ -616,3 +617,10 @@ class WebVitalsView(APIView):
 
     def get(self, request: Request, project_id: int) -> Response:
         return Response(vitals_summary(project_id, request.query_params.get("period", "24h")))
+
+
+class ReleasesView(APIView):
+    """Per-release health: what each version served, and what it broke."""
+
+    def get(self, request: Request, project_id: int) -> Response:
+        return Response(releases_summary(project_id, request.query_params.get("period", "24h")))

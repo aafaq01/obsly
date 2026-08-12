@@ -47,6 +47,8 @@ export interface Issue {
   first_seen: string
   last_seen: string
   hourly: number[]
+  /** Where this bug came from, captured once when the issue was created. */
+  first_release: string
   category: 'error' | 'performance'
   issue_type: string
   evidence: PerformanceEvidence | Record<string, never>
@@ -282,6 +284,21 @@ export interface TagValue {
   percentage: number
 }
 
+export interface Release {
+  version: string
+  requests: number
+  /** Named for what it measures: requests, not sessions. See the backend module note. */
+  failure_free_rate: number
+  failures: number
+  p95: number
+  errors: number
+  issues_introduced: number
+  issues_unresolved: number
+  adoption: number
+  first_seen: string
+  last_seen: string
+}
+
 export interface WebVitals {
   period: string
   pageloads: number
@@ -465,6 +482,10 @@ export const api = {
   alerts: (projectId: number) => get<AlertFire[]>(`/projects/${projectId}/alerts/`),
   vitals: (projectId: number, period: string) =>
     get<WebVitals>(`/projects/${projectId}/vitals/?period=${period}`),
+  releases: (projectId: number, period: string) =>
+    get<{ releases: Release[] }>(`/projects/${projectId}/releases/?period=${period}`).then(
+      (body) => body.releases,
+    ),
   traces: (projectId: number, params: URLSearchParams) =>
     get<TraceSummary[]>(`/projects/${projectId}/traces/?${params.toString()}`),
   trace: (id: string) => get<TraceDetail>(`/traces/${id}/`),

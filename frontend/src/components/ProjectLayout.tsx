@@ -11,6 +11,7 @@ const TABS = [
   { to: 'vitals', label: 'Web Vitals' },
   { to: 'spans', label: 'Spans' },
   { to: 'logs', label: 'Logs' },
+  { to: 'releases', label: 'Releases' },
   { to: 'alerts', label: 'Alerts' },
   { to: 'settings', label: 'Settings' },
 ]
