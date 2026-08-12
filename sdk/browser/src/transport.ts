@@ -23,28 +23,35 @@ export function buildEnvelope(eventId: string, items: Item[]): string {
 }
 
 /**
- * Send, preferring `sendBeacon` when the page is going away.
+ * Send, surviving the page going away.
  *
- * A pagehide is exactly when the numbers matter — a load that ended in the reader leaving is a
- * load worth measuring — and it is also when `fetch` is cancelled. `sendBeacon` survives the
- * unload; `keepalive` is the fallback for browsers that reject the beacon's size.
+ * `fetch` with `keepalive`, never `sendBeacon`. A beacon looks like the obvious choice and is
+ * the wrong one here: it always sends with credentials mode "include", and CORS forbids a
+ * wildcard `Access-Control-Allow-Origin` for a credentialed request. Every cross-origin beacon
+ * is therefore rejected at the preflight — which is every real deployment, because the page is
+ * on the customer's origin and Obsly is not.
+ *
+ * Worse, `sendBeacon` returns `true` the moment the browser queues the request. The CORS
+ * failure happens afterwards and is unobservable, so a fallback behind that return value never
+ * runs and the page load is lost in silence.
+ *
+ * `keepalive` outlives the document the same way, and unlike a beacon it takes headers and lets
+ * credentials be turned off — which is what makes the wildcard legal. Its body limit is 64KB;
+ * the span cap keeps an envelope far below that.
  */
-export function send(dsn: Dsn, body: string, { beacon = false } = {}): void {
-  const url = `${dsn.envelopeUrl}?obsly_key=${encodeURIComponent(dsn.publicKey)}`
-
-  if (beacon && typeof navigator.sendBeacon === 'function') {
-    // The key travels in the query string here: a beacon cannot set headers at all.
-    const blob = new Blob([body], { type: 'application/x-obsly-envelope' })
-    if (navigator.sendBeacon(url, blob)) return
-  }
-
+export function send(dsn: Dsn, body: string): void {
   void fetch(dsn.envelopeUrl, {
     method: 'POST',
+    // In a header, not the query string. A beacon could not set one, which is the only reason
+    // the key was ever in a URL — and a URL is what ends up in access logs and referrers.
     headers: { 'Content-Type': 'application/x-obsly-envelope', 'X-Obsly-Key': dsn.publicKey },
     body,
+    // Outlives the page. Without it a report sent on tab-hide is cancelled mid-flight, which
+    // loses exactly the page loads worth measuring — the ones that ended in someone leaving.
     keepalive: true,
-    // Never send cookies. The public key is the credential, and an SDK that carried a
-    // customer's session cookie to our origin would be a hole in their site, not a feature.
+    // Never send cookies. The public key is the credential, an SDK that carried a customer's
+    // session cookie to our origin would be a hole in their site, and "include" is what makes
+    // the server's wildcard origin illegal.
     credentials: 'omit',
     mode: 'cors',
   }).catch(() => {
