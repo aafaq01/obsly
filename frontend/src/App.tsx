@@ -22,7 +22,12 @@ import { Traces } from './pages/Traces'
 import { Vitals } from './pages/Vitals'
 import { Cache } from './pages/Cache'
 
-type Auth = { state: 'loading' } | { state: 'in'; username: string } | { state: 'out' }
+type Auth =
+  | { state: 'loading' }
+  | { state: 'in'; username: string }
+  // `firstRun` is the case with no users at all: the form opens on register, because a
+  // sign-in form is a door with no key cut for it.
+  | { state: 'out'; signupOpen: boolean; firstRun: boolean }
 
 export function App() {
   const [auth, setAuth] = useState<Auth>({ state: 'loading' })
@@ -34,10 +39,16 @@ export function App() {
         setAuth(
           session.authenticated && session.username
             ? { state: 'in', username: session.username }
-            : { state: 'out' },
+            : {
+                state: 'out',
+                signupOpen: session.signup_open ?? false,
+                // Open registration on an install that already has users is a team choosing
+                // to leave the door open; open on an install with none is a first run.
+                firstRun: session.signup_open === true && session.username === null,
+              },
         ),
       )
-      .catch(() => setAuth({ state: 'out' }))
+      .catch(() => setAuth({ state: 'out', signupOpen: false, firstRun: false }))
   }, [])
 
   return (
@@ -46,7 +57,11 @@ export function App() {
         {auth.state === 'loading' && <Notice>Checking session…</Notice>}
 
         {auth.state === 'out' && (
-          <Login onSignedIn={(username) => setAuth({ state: 'in', username })} />
+          <Login
+            signupOpen={auth.signupOpen}
+            firstRun={auth.firstRun}
+            onSignedIn={(username) => setAuth({ state: 'in', username })}
+          />
         )}
 
         {auth.state === 'in' && (
@@ -55,7 +70,11 @@ export function App() {
               element={
                 <AppShell
                   username={auth.username}
-                  onSignOut={() => void api.logout().then(() => setAuth({ state: 'out' }))}
+                  onSignOut={() =>
+                    void api
+                      .logout()
+                      .then(() => setAuth({ state: 'out', signupOpen: false, firstRun: false }))
+                  }
                 />
               }
             >

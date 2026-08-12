@@ -7,6 +7,7 @@ app_name = "api"
 urlpatterns = [
     path("me/", auth_views.SessionView.as_view(), name="me"),
     path("auth/login/", auth_views.LoginView.as_view(), name="login"),
+    path("auth/register/", auth_views.RegisterView.as_view(), name="register"),
     path("auth/logout/", auth_views.LogoutView.as_view(), name="logout"),
     path("organizations/", views.OrganizationListView.as_view(), name="organizations"),
     path(

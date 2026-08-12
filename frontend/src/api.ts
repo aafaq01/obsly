@@ -519,6 +519,9 @@ const patch = <T>(path: string, body: unknown) => send<T>(path, 'PATCH', body)
 export interface Session {
   authenticated: boolean
   username: string | null
+  /** Whether an account can be created right now. Absent once signed in — it is only a
+   *  question the sign-in screen has. */
+  signup_open?: boolean
 }
 
 /** The message the server sent, so "Incorrect username or password" reaches the user instead
@@ -527,6 +530,15 @@ const post = <T>(path: string, body: unknown) => send<T>(path, 'POST', body)
 
 export const api = {
   session: () => get<Session>('/me/'),
+  register: (username: string, password: string) =>
+    // Same credential-error handling as sign-in: a 400 here carries the reason the password
+    // was refused, and flattening it to a status code sends people to guess.
+    send<Session>(
+      '/auth/register/',
+      'POST',
+      { username, password },
+      { authIsCredentialError: true },
+    ),
   login: (username: string, password: string) =>
     send<Session>('/auth/login/', 'POST', { username, password }, { authIsCredentialError: true }),
   logout: () => post<Session>('/auth/logout/', {}),
