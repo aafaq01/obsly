@@ -23,6 +23,9 @@ from apps.alerts.delivery import send_now
 from apps.alerts.models import AlertFire, AlertRule
 from apps.api.dashboard import overview
 from apps.api.database import summary as database_summary
+from apps.api.flags import issues_touching
+from apps.api.flags import project_summary as flag_summary
+from apps.api.flags import suspects as flag_suspects
 from apps.api.performance import (
     endpoint_detail,
     endpoint_summary,
@@ -471,6 +474,10 @@ class IssueDetailView(generics.RetrieveAPIView[Issue]):
                 "issue": self.get_serializer(issue).data,
                 "latest_event": EventSerializer(latest).data if latest else None,
                 "tags": _tag_distribution(issue),
+                # Which flag is implicated, not just which were on. A list of flags is a list
+                # nobody reads; the comparison against the rest of the project is the part
+                # that names a suspect.
+                "flags": flag_suspects(issue),
                 "trace": trace,
             }
         )
@@ -646,3 +653,21 @@ class DatabaseInsightsView(APIView):
     def get(self, request: Request, project_id: int) -> Response:
         get_object_or_404(Project, pk=project_id)
         return Response(database_summary(project_id, request.query_params.get("period", "24h")))
+
+
+class FeatureFlagsView(APIView):
+    """Flags this project is reporting, and what each one is implicated in."""
+
+    def get(self, request: Request, project_id: int) -> Response:
+        get_object_or_404(Project, pk=project_id)
+        win = resolve(request.query_params.get("period", "24h"))
+        flag = request.query_params.get("flag", "").strip()
+
+        return Response(
+            {
+                "period": win.period,
+                "flags": flag_summary(project_id, win.since),
+                "issues": issues_touching(project_id, flag, win.since) if flag else [],
+                "flag": flag,
+            }
+        )

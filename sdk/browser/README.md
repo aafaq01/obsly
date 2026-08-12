@@ -80,3 +80,16 @@ try {
 
 Scalar context values also become filterable tags. Objects stay in `extra`, because a tag you
 cannot group by is not a tag.
+
+## Feature flags
+
+```ts
+import { setFlag } from 'obsly-browser'
+
+const enabled = flags.isEnabled('new-checkout')
+setFlag('new-checkout', enabled)
+```
+
+Errors and page loads sent afterwards carry the evaluation log, in evaluation order. The issue
+page then ranks flags by how much more often each was on inside that issue than elsewhere, which
+is what turns a list of flags into a suspect.

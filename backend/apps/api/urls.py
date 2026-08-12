@@ -46,6 +46,7 @@ urlpatterns = [
     ),
     path("projects/<int:project_id>/traces/", views.TraceListView.as_view(), name="traces"),
     path("projects/<int:project_id>/vitals/", views.WebVitalsView.as_view(), name="vitals"),
+    path("projects/<int:project_id>/flags/", views.FeatureFlagsView.as_view(), name="flags"),
     path(
         "projects/<int:project_id>/database/",
         views.DatabaseInsightsView.as_view(),

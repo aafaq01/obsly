@@ -60,6 +60,7 @@ def event_from_payload(
         release=_text(payload.get("release"), "release"),
         server_name=_text(payload.get("server_name"), "server_name"),
         tags=_tags(payload.get("tags")),
+        flags=_flags(payload.get("flags")),
         payload=payload,
     )
 
@@ -141,6 +142,38 @@ def _tags(raw: Any) -> dict[str, str]:
         str(key)[:64]: str(value)[:200]
         for key, value in list(raw.items())[:50]
         if not isinstance(value, dict | list)
+    }
+
+
+MAX_FLAGS = 100
+
+
+def _flags(raw: Any) -> dict[str, bool]:
+    """Evaluated flag values, kept as booleans.
+
+    A flag is a decision the application already made, so only the outcome is stored — a
+    multivariate value would need its own cardinality budget and the question people ask is
+    "was it on".
+
+    Insertion order is preserved, which is the evaluation order the SDK saw. That is what makes
+    the log answer "what had already been decided when this broke" rather than just "what was
+    set".
+    """
+    if isinstance(raw, list):
+        # The wire form an evaluation log naturally takes: [{"flag": name, "result": bool}, …]
+        raw = {
+            entry.get("flag"): entry.get("result")
+            for entry in raw
+            if isinstance(entry, dict) and entry.get("flag")
+        }
+
+    if not isinstance(raw, dict):
+        return {}
+
+    return {
+        str(name)[:200]: bool(value)
+        for name, value in list(raw.items())[:MAX_FLAGS]
+        if isinstance(value, bool)
     }
 
 

@@ -125,6 +125,7 @@ class EventSerializer(serializers.ModelSerializer[Event]):
             "release",
             "server_name",
             "tags",
+            "flags",
             "trace_id",
             "span_id",
             "exception",

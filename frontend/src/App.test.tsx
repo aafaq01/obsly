@@ -363,6 +363,7 @@ describe('StatusActions', () => {
     issue: { ...ISSUE, fingerprint: 'abc', fingerprint_components: ['ValueError'] },
     latest_event: null,
     tags: {},
+    flags: [],
   }
 
   function renderDetail() {
@@ -708,6 +709,7 @@ describe('Issue detail layout', () => {
       payload: { huge: 'x'.repeat(500) },
     },
     tags: {},
+    flags: [],
   }
 
   function renderIssue() {
@@ -788,6 +790,7 @@ describe('Correlation', () => {
           issue: { ...ISSUE, fingerprint: 'f', fingerprint_components: [] },
           latest_event: EVENT,
           tags: {},
+          flags: [],
           trace: {
             id: 'trace-uuid',
             name: '/checkout/{cart_id}',
@@ -817,6 +820,7 @@ describe('Correlation', () => {
           issue: { ...ISSUE, fingerprint: 'f', fingerprint_components: [] },
           latest_event: { ...EVENT, trace_id: '' },
           tags: {},
+          flags: [],
           trace: null,
         },
       },
@@ -1201,6 +1205,7 @@ describe('Performance issues', () => {
           issue: { ...PERF_ISSUE, fingerprint: 'f', fingerprint_components: [] },
           latest_event: null,
           tags: {},
+          flags: [],
           trace: null,
         },
       },
@@ -1388,6 +1393,7 @@ describe('Navigation depth', () => {
           issue: { ...ISSUE, fingerprint: 'f', fingerprint_components: [] },
           latest_event: null,
           tags: {},
+          flags: [],
           trace: null,
         },
       },
@@ -1618,6 +1624,7 @@ describe('Review findings', () => {
           issue: { ...ISSUE, fingerprint: 'f', fingerprint_components: [] },
           latest_event: null,
           tags: {},
+          flags: [],
           trace: null,
         },
       },
@@ -2438,5 +2445,68 @@ describe('Web Vitals depth', () => {
     await screen.findByText('no data')
     // Three vitals in the fixture, one of them unmeasured.
     expect(document.querySelectorAll('.bands')).toHaveLength(2)
+  })
+})
+
+describe('Suspect feature flags', () => {
+  function mount(flags: unknown[]) {
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/': { body: [PROJECT] },
+      '/projects/1/': { body: { ...PROJECT, keys: [] } },
+      '/issues/9/': {
+        body: {
+          issue: { ...ISSUE, fingerprint: 'f', fingerprint_components: [] },
+          latest_event: null,
+          tags: {},
+          flags,
+          trace: null,
+        },
+      },
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/projects/1/issues/9']}>
+        <App />
+      </MemoryRouter>,
+    )
+  }
+
+  const SUSPECT = {
+    flag: 'new-checkout',
+    on_in_issue: 20,
+    issue_events: 20,
+    issue_rate: 1,
+    baseline_rate: 0.04,
+    baseline_events: 500,
+    lift: 0.96,
+  }
+
+  it('states the gap, not just that the flag was on', async () => {
+    // A flag on for everybody is not a suspect however often it appears, so the comparison is
+    // the number that matters.
+    mount([SUSPECT])
+
+    expect(await screen.findByText('new-checkout')).toBeInTheDocument()
+    expect(screen.getByText('+96 pts')).toBeInTheDocument()
+    expect(screen.getByText('4%')).toBeInTheDocument()
+  })
+
+  it('says there is no baseline rather than showing a zero', async () => {
+    // Rendering "nothing to compare against" as 0 would make the least-known flag look like
+    // the strongest signal, which is exactly backwards.
+    mount([{ ...SUSPECT, baseline_rate: null, baseline_events: 0, lift: null }])
+
+    expect(await screen.findByText('no baseline yet')).toBeInTheDocument()
+    expect(screen.queryByText('+0 pts')).not.toBeInTheDocument()
+  })
+
+  it('shows nothing at all when no flags were reported', async () => {
+    // An empty table implies flags were checked and cleared. Nothing was checked.
+    mount([])
+
+    // The title appears in the breadcrumb and the heading.
+    await screen.findAllByText('ValueError: cart is empty')
+    expect(screen.queryByText('Feature flags')).not.toBeInTheDocument()
   })
 })

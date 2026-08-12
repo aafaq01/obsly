@@ -55,6 +55,13 @@ class Event(TimestampedModel):
     release = models.CharField(max_length=128, blank=True, db_index=True)
     server_name = models.CharField(max_length=256, blank=True)
 
+    # Which feature flags were on when this happened, in evaluation order.
+    #
+    # A column rather than a dig into `payload`, because the question it exists to answer —
+    # "is this issue only happening to people with X on?" — is asked across every event in a
+    # group at once, which is exactly the scan an extracted column avoids.
+    flags = models.JSONField(default=dict)
+
     payload = models.JSONField()
     tags = models.JSONField(default=dict)
 

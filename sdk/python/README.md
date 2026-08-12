@@ -124,3 +124,20 @@ the personal data lives.
 
 Returns `False` if SQLAlchemy is not installed rather than raising: an optional integration that
 breaks startup by being unavailable is worse than one that is simply absent.
+
+## Feature flags
+
+Record what the application decided, where it decided it:
+
+```python
+enabled = flags.is_enabled("new-checkout", user)
+obsly.set_flag("new-checkout", enabled)
+```
+
+Every event sent afterwards carries the evaluation log, and an issue page ranks the flags by
+how much more often each was on inside that issue than across the rest of the project. A flag
+on for 100% of the failures and 4% of the traffic is a suspect; a flag on for everybody is not,
+however often it appears.
+
+Called at the point of evaluation rather than read back from the flag service later, because
+those differ exactly when it matters — during a rollout.

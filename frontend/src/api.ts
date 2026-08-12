@@ -432,6 +432,18 @@ export interface IssueDetail {
   }
   latest_event: ObslyEvent | null
   tags: Record<string, TagValue[]>
+  /** Flags ranked by how much more often they were on here than across the project.
+   *  `lift` is null where there is no baseline to compare against, which is a different
+   *  answer from "not implicated". */
+  flags: {
+    flag: string
+    on_in_issue: number
+    issue_events: number
+    issue_rate: number
+    baseline_rate: number | null
+    baseline_events: number
+    lift: number | null
+  }[]
   /** The request this error happened inside, when both were recorded. */
   trace: { id: string; name: string; duration_ms: number; status: string } | null
 }

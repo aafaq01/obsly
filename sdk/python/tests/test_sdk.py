@@ -754,3 +754,81 @@ def test_a_continued_trace_keeps_the_span_it_continues_from() -> None:
 
     assert trace["trace_id"] == "a" * 32
     assert trace["parent_span_id"] == "b" * 16, "the caller's span must survive serialisation"
+
+
+class TestFeatureFlags:
+    """Which flags were on when it broke.
+
+    The value is not the list — it is that the list was captured at the moment of the failure,
+    from the code's own evaluations, rather than read back from a flag service that has since
+    moved on. Those differ exactly during a rollout, which is when anyone asks.
+    """
+
+    def client(self) -> Client:
+        return Client(DSN, transport=FakeTransport())
+
+    def test_an_evaluation_reaches_the_event(self) -> None:
+        client = self.client()
+        client.set_flag("new-checkout", True)
+
+        client.capture_message("boom")
+
+        assert client._transport.events()[0]["flags"] == {"new-checkout": True}  # type: ignore[attr-defined]
+
+    def test_both_outcomes_are_recorded(self) -> None:
+        """A flag that was off is evidence too — it is how "only affects people with X on" is
+        distinguished from "affects everybody"."""
+        client = self.client()
+        client.set_flag("new-checkout", True)
+        client.set_flag("legacy-pricing", False)
+
+        client.capture_message("boom")
+
+        assert client._transport.events()[0]["flags"] == {  # type: ignore[attr-defined]
+            "new-checkout": True,
+            "legacy-pricing": False,
+        }
+
+    def test_re_evaluating_moves_it_to_the_end(self) -> None:
+        """The order is the evaluation order, and the last decision is the one the code acted
+        on."""
+        client = self.client()
+        client.set_flag("a", True)
+        client.set_flag("b", True)
+        client.set_flag("a", False)
+
+        client.capture_message("boom")
+        recorded = client._transport.events()[0]["flags"]  # type: ignore[attr-defined]
+
+        assert list(recorded) == ["b", "a"]
+        assert recorded["a"] is False
+
+    def test_the_log_is_bounded(self) -> None:
+        """A flag name built from a user id would otherwise grow without limit in a long-lived
+        process."""
+        client = self.client()
+        for index in range(150):
+            client.set_flag(f"flag-{index}", True)
+
+        client.capture_message("boom")
+        recorded = client._transport.events()[0]["flags"]  # type: ignore[attr-defined]
+
+        assert len(recorded) == 100
+        # Oldest out: dropping the newest would lose the evaluation closest to the failure.
+        assert "flag-149" in recorded
+        assert "flag-0" not in recorded
+
+    def test_a_non_boolean_is_ignored_rather_than_coerced(self) -> None:
+        """A flag is a decision the application already made. Coercing "maybe" to True would
+        record an outcome nobody chose."""
+        client = self.client()
+        client.set_flag("weird", "yes")  # type: ignore[arg-type]
+
+        client.capture_message("boom")
+
+        assert client._transport.events()[0]["flags"] == {}  # type: ignore[attr-defined]
+
+    def test_setting_a_flag_before_init_does_nothing(self) -> None:
+        """An application should not have to guard its own instrumentation with a check that
+        the SDK is running."""
+        obsly.set_flag("new-checkout", True)  # no client configured
