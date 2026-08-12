@@ -90,6 +90,12 @@ def checkout(cart_id: str) -> dict[str, float]:
     """Two different bugs behind one route, so grouping has to tell them apart."""
     log.info("checkout started for cart %s", cart_id)
 
+    # A rollout in progress. The payment failure below only happens on the new path, so the
+    # flag should stand out against a baseline where it is mostly off.
+    new_checkout = random.random() < 0.25
+    obsly.set_flag("new-checkout", new_checkout)
+    obsly.set_flag("dark-mode", random.random() < 0.5)
+
     with obsly.start_span("db.query", "SELECT * FROM carts WHERE id = %s"):
         time.sleep(random.uniform(0.004, 0.02))
         items = CART.get(cart_id)
@@ -105,7 +111,8 @@ def checkout(cart_id: str) -> dict[str, float]:
     with obsly.start_span("http.client", "POST payments.example.com/charge"):
         log.info("charging card for cart %s", cart_id)
         time.sleep(random.uniform(0.05, 0.4))
-        if random.random() < 0.5:
+        # Only the new path fails, which is what makes the flag a suspect rather than noise.
+        if new_checkout and random.random() < 0.85:
             raise ConnectionError("payments.example.com returned 502")
 
     total = sum(item["price"] for item in items)

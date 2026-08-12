@@ -1,5 +1,7 @@
 import pytest
 from django.db import IntegrityError
+from django.test import Client
+from django.urls import reverse
 
 from apps.projects.models import Organization, Project, ProjectKey, generate_public_key
 
@@ -94,3 +96,28 @@ class TestKeyRotation:
         project.delete()
 
         assert ProjectKey.objects.count() == 0
+
+
+def test_a_new_project_is_born_with_an_ingest_key(
+    staff_client: Client, organization: Organization
+) -> None:
+    """A project without a key cannot receive anything, so creating one and stopping leaves a
+    row that looks finished and does nothing — and the next step, wiring up an SDK, has no DSN
+    to paste."""
+    response = staff_client.post(
+        reverse("api:projects"),
+        {
+            "name": "Checkout",
+            "slug": "checkout",
+            "platform": "python",
+            "organization_id": organization.pk,
+        },
+        content_type="application/json",
+        secure=True,
+    )
+
+    assert response.status_code == 201
+    project = Project.objects.get(slug="checkout")
+    [key] = project.keys.all()
+    assert key.is_active
+    assert len(key.public_key) == 32

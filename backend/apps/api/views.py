@@ -89,6 +89,19 @@ class OrganizationDetailView(generics.RetrieveUpdateAPIView[Organization]):
 class ProjectListView(generics.ListCreateAPIView[Project]):
     serializer_class = ProjectSerializer
 
+    def perform_create(self, serializer: BaseSerializer[Project]) -> None:
+        """Every project is born with an ingest key.
+
+        A project without one cannot receive anything, so creating one and stopping leaves a
+        row that looks finished and does nothing — and the next step, wiring up an SDK, has no
+        DSN to paste. Found on a fresh install, where it is the whole of the first experience.
+
+        One key, named so it is obvious it can be replaced: rotation means issue new, migrate
+        clients, revoke old, and that is easier to start from an example than from nothing.
+        """
+        project = serializer.save()
+        ProjectKey.objects.create(project=project, label="Default")
+
     def get_queryset(self) -> QuerySet[Project]:
         return (
             Project.objects.select_related("organization")
