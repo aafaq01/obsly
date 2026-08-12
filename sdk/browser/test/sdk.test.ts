@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { parseDsn } from '../src/dsn'
-import { parseStack } from '../src/stacktrace'
-import { instrumentFetch, TRACE_HEADER, traceHeader } from '../src/tracing'
-import { buildEnvelope, send } from '../src/transport'
+import { parseDsn } from '../src/dsn.js'
+import { parseStack } from '../src/stacktrace.js'
+import { instrumentFetch, TRACE_HEADER, traceHeader } from '../src/tracing.js'
+import { buildEnvelope, send } from '../src/transport.js'
 
 const DSN = 'https://abc123@obsly.example.com/7'
 

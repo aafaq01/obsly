@@ -38,6 +38,30 @@ uv run python drive.py http://127.0.0.1:8200 300
 | `/legacy` | a *handled* exception reported explicitly, caller gets a clean 503 |
 | `/slow` | succeeds slowly, so the percentiles have a visible tail |
 
+## The browser half
+
+`/shop` is a page that reports itself. Build the browser SDK first, then open it:
+
+```bash
+cd sdk/browser && npm install && npm run build     # once
+open http://127.0.0.1:8200/shop
+```
+
+It is served from the same origin as the API it calls, which is what lets the browser SDK
+attach a trace header without turning every request into a preflighted one.
+
+| Button | What lands in Obsly |
+|---|---|
+| any **traced request** | a browser `http.client` span, and the FastAPI transaction **parented to it** — one waterfall from the click to the SQL |
+| **Throw uncaught TypeError** | a JavaScript issue with parsed frames, correlated to the page load by `trace_id` |
+| **Unhandled promise rejection** | the same, via `unhandledrejection` |
+| **Caught and reported** | `captureException` with `cartId` and `step` as filterable tags |
+| **Shift the layout** / **Block the main thread** | worse CLS and INP, visible on the Web Vitals page |
+
+Vitals are sent when the tab is hidden or closed, not on a timer — so switch tabs, then look at
+**Web Vitals** in Obsly. The page deliberately loads its hero late, so LCP is a number worth
+looking at rather than a flat zero.
+
 Traffic is weighted so the stream looks real: two loud issues, several quiet ones, and more
 successes than failures. A stream where every issue has the same count tells you nothing about
 what to triage first.

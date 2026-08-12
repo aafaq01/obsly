@@ -36,6 +36,7 @@ linters and type checks are green in CI.
 | 27 | `feat/chart-timestamps` | Charts read in clock time and say what they measure |
 | 28 | `feat/alerts` | New-issue, regression and frequency rules with webhook delivery |
 | 29 | `feat/sdk-browser` | Browser SDK: errors, Core Web Vitals, one trace from paint to query |
+| 30 | `feat/browser-demo` | A demo page that reports itself, so the browser half is clickable |
 
 ## Planned
 
