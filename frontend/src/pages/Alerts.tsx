@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 
+import { Select } from '../components/Select'
+
 import { api, type AlertFire, type AlertRule, type AlertTrigger } from '../api'
 import { Notice, Skeleton } from '../components/Notice'
 import { handle } from '../errors'
@@ -222,7 +224,7 @@ function NewRule({
 
         <label>
           Trigger
-          <select
+          <Select
             value={trigger}
             onChange={(event) => setTrigger(event.target.value as AlertTrigger)}
           >
@@ -231,7 +233,7 @@ function NewRule({
                 {option.label}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
 
         {/* What the rule will do, in a sentence, before it is saved. */}
@@ -262,12 +264,12 @@ function NewRule({
 
         <label>
           Only this level
-          <select value={level} onChange={(event) => setLevel(event.target.value)}>
+          <Select value={level} onChange={(event) => setLevel(event.target.value)}>
             <option value="">Any level</option>
             <option value="fatal">fatal</option>
             <option value="error">error</option>
             <option value="warning">warning</option>
-          </select>
+          </Select>
         </label>
 
         <label>

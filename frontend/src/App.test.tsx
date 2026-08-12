@@ -2130,3 +2130,134 @@ describe('Insights layers', () => {
     expect(await screen.findByText(/Hit rate is not being reported/)).toBeInTheDocument()
   })
 })
+
+describe('Trace waterfall grouping', () => {
+  const at = (offsetMs: number) => new Date(1_800_000_000_000 + offsetMs).toISOString()
+
+  function repeated(count: number, from: number) {
+    return Array.from({ length: count }, (_, index) => ({
+      span_id: `${index}`.padStart(16, '0'),
+      parent_span_id: 'a'.repeat(16),
+      op: 'db.query',
+      description: 'SELECT total FROM orders WHERE id = %s',
+      status: 'ok',
+      start_timestamp: at(from + index * 10),
+      timestamp: at(from + index * 10 + 4),
+      duration_ms: 4,
+      data: {},
+    }))
+  }
+
+  const TRACE = {
+    id: 't-1',
+    trace_id: 'a'.repeat(32),
+    span_id: 'a'.repeat(16),
+    name: '/report',
+    op: 'http.server',
+    status: 'ok',
+    start_timestamp: at(0),
+    timestamp: at(400),
+    duration_ms: 400,
+    environment: 'production',
+    release: 'api@1.0.0',
+    span_count: 26,
+    spans: [
+      ...repeated(25, 20),
+      {
+        span_id: 'f'.repeat(16),
+        parent_span_id: 'a'.repeat(16),
+        op: 'http.client',
+        description: 'POST payments.example.com/charge',
+        status: 'ok',
+        start_timestamp: at(300),
+        timestamp: at(390),
+        duration_ms: 90,
+        data: {},
+      },
+    ],
+    errors: [],
+    logs: [],
+  }
+
+  function mount() {
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/': { body: [PROJECT] },
+      '/projects/1/': { body: { ...PROJECT, keys: [] } },
+      '/traces/t-1/': { body: TRACE },
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/projects/1/traces/t-1']}>
+        <App />
+      </MemoryRouter>,
+    )
+  }
+
+  it('collapses a run of identical spans into one row', async () => {
+    // Twenty-five near-identical bars push the one interesting span off the screen, and the
+    // repetition is itself the finding.
+    mount()
+
+    expect(await screen.findByText('25×')).toBeInTheDocument()
+    // One row for the group, not twenty-five.
+    expect(screen.getAllByText('SELECT total FROM orders WHERE id = %s')).toHaveLength(1)
+  })
+
+  it('leaves a span that only happened once alone', async () => {
+    // Grouping a group of one adds a disclosure control that reveals exactly what it hid.
+    mount()
+
+    await screen.findByText('25×')
+    expect(screen.getByText('POST payments.example.com/charge')).toBeInTheDocument()
+    expect(screen.queryByText('1×')).not.toBeInTheDocument()
+  })
+
+  it('opens the group to show each call and when it ran', async () => {
+    mount()
+
+    await userEvent.click(await screen.findByRole('button', { name: /Show the 25/ }))
+
+    // Both readings: the offset says where in the request it happened, the clock time lines it
+    // up against a log line.
+    expect(screen.getAllByText(/^\+\d/).length).toBeGreaterThan(20)
+  })
+
+  it('does not group two runs separated by something else', async () => {
+    // Two runs of the same query either side of an HTTP call are two different events in the
+    // request's story, and merging them across it would hide the ordering that explains it.
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/': { body: [PROJECT] },
+      '/projects/1/': { body: { ...PROJECT, keys: [] } },
+      '/traces/t-1/': {
+        body: {
+          ...TRACE,
+          spans: [
+            ...repeated(3, 10),
+            {
+              span_id: 'e'.repeat(16),
+              parent_span_id: 'a'.repeat(16),
+              op: 'http.client',
+              description: 'GET inventory',
+              status: 'ok',
+              start_timestamp: at(100),
+              timestamp: at(150),
+              duration_ms: 50,
+              data: {},
+            },
+            ...repeated(3, 200),
+          ],
+        },
+      },
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/projects/1/traces/t-1']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findAllByText('3×')).toHaveLength(2)
+  })
+})

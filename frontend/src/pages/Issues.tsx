@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 
+import { Select } from '../components/Select'
+
 import { api, type Issue, type Project } from '../api'
 import { Notice, Skeleton } from '../components/Notice'
 import { handle } from '../errors'
@@ -53,17 +55,17 @@ export function Issues() {
           onChange={(event) => setQuery(event.target.value)}
           aria-label="Search issues"
         />
-        <select value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Status">
+        <Select value={status} onChange={(e) => setStatus(e.target.value)} aria-label="Status">
           <option value="unresolved">Unresolved</option>
           <option value="resolved">Resolved</option>
           <option value="ignored">Ignored</option>
           <option value="all">All</option>
-        </select>
-        <select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Sort by">
+        </Select>
+        <Select value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Sort by">
           <option value="last_seen">Last seen</option>
           <option value="first_seen">First seen</option>
           <option value="times_seen">Events</option>
-        </select>
+        </Select>
       </div>
 
       {issues === null ? (

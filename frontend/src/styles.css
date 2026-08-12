@@ -412,19 +412,81 @@ a {
   margin-bottom: 16px;
 }
 
-.filters input,
-.filters select {
+.filters input {
+  flex: 1;
+  min-width: 220px;
+}
+
+/* --- controls ----------------------------------------------------------- */
+
+/* Global, not scoped to one container. These rules lived under `.filters`, so every select
+   outside that one wrapper — the whole page-filter bar, the alert rule form — rendered as a
+   raw OS widget: Arial, the platform's own grey, and a border that matched nothing. On a dark
+   page that is not a small difference, it is a control that looks like it belongs to a
+   different application. */
+
+input,
+select,
+textarea {
   font: inherit;
+  font-size: 13px;
   color: var(--ink);
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 6px 10px;
+  line-height: 1.4;
 }
 
-.filters input {
-  flex: 1;
-  min-width: 220px;
+input:hover,
+select:hover,
+textarea:hover {
+  border-color: var(--baseline);
+}
+
+/* One visible focus treatment for every control, keyboard or not — a ring the same weight as
+   the border it replaces, so nothing shifts by a pixel when it appears. */
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--series-1);
+  outline-offset: 1px;
+}
+
+select {
+  /* The platform arrow is drawn in the platform's colour and cannot be told about the theme.
+     Suppressing it and drawing our own with a mask means the chevron is currentColor, so it
+     follows the text in both themes and in a high-contrast mode. */
+  appearance: none;
+  padding-right: 26px;
+  background-image: none;
+  cursor: pointer;
+}
+
+.select-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.select-wrap::after {
+  content: '';
+  position: absolute;
+  right: 9px;
+  top: 50%;
+  width: 9px;
+  height: 9px;
+  transform: translateY(-50%);
+  pointer-events: none;
+  background-color: var(--ink-muted);
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M1 3.5 5 7.5 9 3.5' fill='none' stroke='%23000' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+}
+
+textarea {
+  min-height: 72px;
+  resize: vertical;
 }
 
 /* --- issue stream ------------------------------------------------------- */
@@ -1187,6 +1249,79 @@ pre.raw {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* A collapsed run of identical spans. Marked by the count and a hatched bar, because a
+   solid bar of the same weight would claim the whole stretch was one continuous call. */
+.wf--group .wf__desc {
+  font-weight: 600;
+}
+
+/* The op line of a group row: disclosure, count and op, side by side. */
+.wf__meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.wf__toggle {
+  background: none;
+  border: none;
+  padding: 0;
+  margin-right: 2px;
+  width: 14px;
+  font: inherit;
+  font-size: 10px;
+  color: var(--ink-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.wf__toggle:hover {
+  color: var(--ink);
+}
+
+.wf__count {
+  /* inline-flex, not the block it inherits: as a block it stretched the full label column and
+     read as a highlight bar across the row. */
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--ink);
+  background: var(--grid);
+  border-radius: 3px;
+  padding: 0 5px;
+  flex-shrink: 0;
+}
+
+.wf--child {
+  background: color-mix(in srgb, var(--plane) 60%, transparent);
+}
+
+.wf__at {
+  font-size: 11px;
+  color: var(--ink-secondary);
+  flex-shrink: 0;
+}
+
+.wf__clock {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wf__bar--group {
+  /* Hatched: the calls inside it are separate, and a solid bar would say otherwise. */
+  background: repeating-linear-gradient(
+    90deg,
+    var(--series-1) 0 6px,
+    color-mix(in srgb, var(--series-1) 35%, transparent) 6px 10px
+  );
 }
 
 .wf__track {

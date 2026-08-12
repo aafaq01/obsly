@@ -1,11 +1,20 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 
+import { Select } from '../components/Select'
+
 import { api, type TraceSummary } from '../api'
 import { Notice, Skeleton } from '../components/Notice'
 import { handle } from '../errors'
 import { formatMs } from '../format'
 import { relativeTime } from '../time'
+
+/** What each root op is, in the words the sidebar uses. */
+const TIER: Record<string, string> = {
+  pageload: 'browser',
+  navigation: 'browser',
+  'http.server': 'backend',
+}
 
 export function Traces() {
   const { projectId } = useParams()
@@ -63,18 +72,18 @@ export function Traces() {
       </p>
 
       <div className="filters">
-        <select value={sort} onChange={(e) => update('sort', e.target.value)} aria-label="Sort by">
+        <Select value={sort} onChange={(e) => update('sort', e.target.value)} aria-label="Sort by">
           <option value="slowest">Slowest first</option>
           <option value="recent">Most recent</option>
-        </select>
-        <select
+        </Select>
+        <Select
           value={status}
           onChange={(e) => update('status', e.target.value)}
           aria-label="Status"
         >
           <option value="all">All</option>
           <option value="failed">Failed only</option>
-        </select>
+        </Select>
       </div>
 
       {traces === null ? (
@@ -95,7 +104,14 @@ export function Traces() {
                   <span className={`level level--${trace.status === 'ok' ? 'info' : 'error'}`}>
                     {trace.status}
                   </span>
-                  <span>{trace.span_count} spans</span>
+                  {/* Which side of the stack this came from. A browser page load and a server
+                      request sitting unlabelled in one list, sorted by duration, puts every
+                      page load on top — they are seconds and requests are milliseconds — and
+                      reads as the backend having got dramatically slower. */}
+                  <span className="tag tag--muted">{TIER[trace.op] ?? trace.op}</span>
+                  <span>
+                    {trace.span_count === 0 ? 'nothing instrumented' : `${trace.span_count} spans`}
+                  </span>
                   {trace.release && <span>{trace.release}</span>}
                   <span>{relativeTime(trace.timestamp)}</span>
                 </div>
