@@ -22,7 +22,7 @@ export function IssueDetailPage() {
   if (error) return <Notice>{error}</Notice>
   if (!detail) return <Notice>Loading issue…</Notice>
 
-  const { issue, latest_event: event, tags, trace } = detail
+  const { issue, latest_event: event, tags, flags, trace } = detail
 
   return (
     <>
@@ -151,6 +151,54 @@ export function IssueDetailPage() {
               </dl>
             </div>
           </section>
+
+          {flags.length > 0 && (
+            <section>
+              <h2 className="section__title">Feature flags</h2>
+              <p className="chart2__caption">
+                Ranked by how much more often each was on here than across the rest of the project.
+                A flag on for everybody is not a suspect, however often it appears.
+              </p>
+              <div className="card">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Flag</th>
+                      <th className="num">On here</th>
+                      <th className="num">Elsewhere</th>
+                      <th className="num strong">Difference</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {flags.map((row) => (
+                      <tr key={row.flag}>
+                        <td className="mono">{row.flag}</td>
+                        <td className="num">
+                          {Math.round(row.issue_rate * 100)}%
+                          <em className="chart2__ago"> of {row.issue_events}</em>
+                        </td>
+                        <td className="num">
+                          {row.baseline_rate === null
+                            ? '—'
+                            : `${Math.round(row.baseline_rate * 100)}%`}
+                        </td>
+                        {/* Null is not zero. "Nothing to compare against" is a different
+                            answer from "no difference", and rendering it as 0 would make the
+                            least-known flag look like the strongest signal. */}
+                        <td className="num strong">
+                          {row.lift === null ? (
+                            <em className="chart2__ago">no baseline yet</em>
+                          ) : (
+                            `${row.lift > 0 ? '+' : ''}${Math.round(row.lift * 100)} pts`
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
 
           {Object.keys(tags).length > 0 && (
             <section>

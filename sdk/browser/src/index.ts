@@ -25,9 +25,13 @@ interface Client {
   sampled: boolean
   spans: Span[]
   measurements: Measurements
+  /** Evaluated flags in evaluation order — a log of what had already been decided. */
+  flags: Map<string, boolean>
   sent: boolean
   teardown: (() => void)[]
 }
+
+const MAX_FLAGS = 100
 
 let client: Client | null = null
 
@@ -52,6 +56,7 @@ export function init(options: Options): void {
     sampled: Math.random() < resolved.tracesSampleRate,
     spans: [],
     measurements: {},
+    flags: new Map(),
     sent: false,
     teardown: [],
   }
@@ -77,6 +82,28 @@ export function init(options: Options): void {
 
   installErrorHandlers(active)
   installPageloadReporter(active)
+}
+
+/**
+ * Record that a feature flag was evaluated, and to what.
+ *
+ * Called from wherever the decision is made, so the log reflects what the code actually asked
+ * for rather than what the flag service says now. Those differ exactly when it matters: during
+ * a rollout.
+ *
+ * A Map, so re-evaluating moves the flag to the end — the last decision is the one the code
+ * acted on. Bounded, because a flag name built from a user id would otherwise grow without
+ * limit in a long-lived tab.
+ */
+export function setFlag(name: string, result: boolean): void {
+  if (!client || !name || typeof result !== 'boolean') return
+
+  client.flags.delete(name)
+  if (client.flags.size >= MAX_FLAGS) {
+    // Oldest out: dropping the newest would lose the evaluation closest to the failure.
+    client.flags.delete(client.flags.keys().next().value!)
+  }
+  client.flags.set(name.slice(0, 200), result)
 }
 
 /** Report an error the page caught itself. */
@@ -106,6 +133,7 @@ export function captureException(error: unknown, context: Record<string, unknown
           ],
         },
         request: { url: location.href },
+        flags: Object.fromEntries(client.flags),
         tags: { url: location.pathname, ...stringTags(context) },
         extra: context,
       },

@@ -22,6 +22,11 @@ _sdk_log = logging.getLogger("obsly")
 
 SDK = {"name": "obsly.python", "version": "0.1.0"}
 
+# An application evaluating thousands of distinct flags is misusing them, and an unbounded map
+# here would let a flag name built from a user id grow without limit inside a long-lived
+# process.
+MAX_FLAGS = 100
+
 
 class Client:
     def __init__(
@@ -48,6 +53,10 @@ class Client:
         # service handles, and nobody should discover that from a bill.
         self.traces_sample_rate = max(0.0, min(1.0, traces_sample_rate))
         self.tags = dict(tags or {})
+        # Evaluated feature flags, in the order they were decided. A bounded, ordered map: the
+        # order is the evaluation order, which is what makes it a log of what had already been
+        # decided when something broke rather than a snapshot of settings.
+        self._flags: dict[str, bool] = {}
         self.enable_logs = enable_logs
         self._logs = LogBuffer()
         self._stop_flusher = threading.Event()
@@ -64,6 +73,26 @@ class Client:
                 target=self._flush_periodically, name="obsly-logs", daemon=True
             )
             self._flusher.start()
+
+    def set_flag(self, name: str, result: bool) -> None:
+        """Record that a feature flag was evaluated, and to what.
+
+        Called from wherever the decision is made — usually a thin wrapper around whatever
+        flag provider the application already uses — so the log reflects what the code actually
+        asked for rather than what a snapshot of the flag service says now. Those differ
+        exactly when it matters: during a rollout.
+
+        Re-evaluating a flag moves it to the end, because the last decision is the one the
+        code acted on.
+        """
+        if not name or not isinstance(result, bool):
+            return
+        self._flags.pop(name, None)
+        if len(self._flags) >= MAX_FLAGS:
+            # Oldest out. A bounded log that drops the newest would hide the evaluation
+            # closest to the failure, which is the one worth keeping.
+            self._flags.pop(next(iter(self._flags)))
+        self._flags[str(name)[:200]] = result
 
     def capture_exception(self, exc: BaseException, *, extra: dict[str, Any] | None = None) -> str:
         return self._capture({"exception": {"values": exception_chain(exc)}}, extra)
@@ -86,6 +115,7 @@ class Client:
             "server_name": self.server_name,
             "sdk": SDK,
             "tags": {**self.tags, **(extra or {}).pop("tags", {})} if extra else dict(self.tags),
+            "flags": dict(self._flags),
             **payload,
         }
         if extra:
@@ -323,6 +353,16 @@ logger = _Logger()
 
 def capture_message(message: str, **kwargs: Any) -> str | None:
     return None if _client is None else _client.capture_message(message, **kwargs)
+
+
+def set_flag(name: str, result: bool) -> None:
+    """Record a feature-flag evaluation on the current client.
+
+    A no-op before init, like every other module-level call here: an application should not
+    have to guard its own instrumentation with a check that the SDK is running.
+    """
+    if _client is not None:
+        _client.set_flag(name, result)
 
 
 def flush(timeout: float = 2.0) -> bool:

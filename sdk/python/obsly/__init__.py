@@ -16,6 +16,7 @@ from obsly.client import (
     get_client,
     init,
     logger,
+    set_flag,
     start_transaction,
 )
 from obsly.integrations import sqlalchemy as sqlalchemy_integration
@@ -35,6 +36,7 @@ __all__ = [
     "get_current_span",
     "init",
     "logger",
+    "set_flag",
     "sqlalchemy_integration",
     "start_span",
     "start_transaction",

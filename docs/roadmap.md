@@ -39,6 +39,37 @@ linters and type checks are green in CI.
 | 30 | `feat/browser-demo` | A demo page that reports itself, so the browser half is clickable |
 | 31 | `feat/releases` | Per-release health, adoption, and which version introduced an issue |
 | 32 | `fix/vitals-never-arrive` | Browser reports were blocked cross-origin by a credentialed beacon |
+| 33 | `feat/app-shell` | Sentry-style sidebar and page filters; Insights split by tier |
+| 34 | `feat/controls-and-traces` | Global control styling; repeated spans grouped, with timestamps |
+| 35 | `feat/db-insights` | Slow-query dashboard, and web vitals with the distribution behind the score |
+| 36 | `chore/publish-sdks` | `obsly` on PyPI, `obsly-browser` on npm |
+| 37 | `chore/demo-uses-published-sdks` | The demo installs from the registries — which found a dropped parent span |
+| 38 | `feat/feature-flags` | FR-CTX-8: flag evaluations on the event, and which flag an issue implicates |
+
+## Coverage against the reference
+
+`docs/reference/sentry-requirements.md` carries 168 numbered requirements. This is where they
+stand, so the gap is a fact rather than a feeling.
+
+| Section | State |
+|---|---|
+| FR-ERR, FR-GRP — errors, grouping, lifecycle | Built |
+| FR-TRC — distributed tracing, browser to database | Built |
+| FR-PERF — N+1 and slow-query detection | Built |
+| FR-INS — frontend, backend, database, cache | Built |
+| FR-LOG — structured logs | Built |
+| FR-SEC — PII scrubbing before the write | Built |
+| FR-CTX — context enrichment | Partial. Tags, extra and **feature flags** land; **breadcrumbs**, **user context** and **attachments** do not |
+| FR-REL — releases | Partial. Health and adoption land; crash-free *users* needs sessions |
+| FR-MET — metrics | Partial. Derived metrics only — see "on metrics" below |
+| FR-ALR — alerting | Partial. Webhook delivery; no digests, no native Slack, no ownership routing |
+| FR-API — APIs | Partial. REST API; no CLI, no release-tagging CI integration |
+| FR-SYM — source maps | None. Browser traces show minified frames |
+| FR-QRY — Discover, query language, custom dashboards | None. Filters are per-page and fixed |
+| FR-ORG — teams, roles, per-project access | None. Every signed-in user sees every project |
+| FR-QTA — quotas, spike protection | None |
+| FR-UPT — uptime and cron monitoring | None |
+| FR-RPL, FR-PRF, FR-FBK, FR-AI — replay, profiling, user feedback, Seer | None |
 
 ## Planned
 
@@ -53,6 +84,8 @@ already run into.
 | `feat/quotas` | Per-project rate limits, spike protection | One runaway loop can currently fill the database — and now also fire an alert per event until its cooldown catches it |
 | `feat/source-maps` | Upload and apply source maps to browser stack traces | The browser SDK reports minified frames today, and `a.js:1:48291` names no line anyone can open |
 | `feat/search` | A query language across issues, spans and logs | Filters are per-page and fixed |
+| `feat/breadcrumbs` | The trail of events leading up to a failure | FR-CTX-4. An error says what broke; the breadcrumbs say what the user did to get there |
+| `feat/user-context` | `set_user`, and "how many people did this affect" | FR-CTX-2. Issue counts are event counts today, and one user retrying forty times reads as forty people |
 
 ## On metrics
 
