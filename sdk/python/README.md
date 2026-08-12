@@ -7,6 +7,12 @@ application it observes through a version conflict it had no business causing.
 ## Install
 
 ```bash
+pip install obsly
+```
+
+Or from a checkout, to work on the SDK itself:
+
+```bash
 pip install -e sdk/python
 ```
 

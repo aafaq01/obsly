@@ -1,5 +1,5 @@
 [project]
-name = "obsly-sdk"
+name = "obsly"
 version = "0.1.0"
 description = "Obsly SDK for Python — errors, tracing, logs and performance, with no runtime dependencies"
 readme = "README.md"
