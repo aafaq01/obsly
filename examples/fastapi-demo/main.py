@@ -4,7 +4,8 @@ Its job is to produce a realistic issue stream: several distinct bugs, one of th
 of them a chained exception, a couple of warnings, and traces with real inner spans — so the
 grouping, correlation and percentile behaviour can be seen rather than described.
 
-    pip install -e ../../sdk/python fastapi uvicorn
+    uv pip install .                 # obsly and fastapi, from PyPI
+    npm install                      # obsly-browser, from npm
     OBSLY_DSN="http://<key>@localhost:8081/<project>" uvicorn main:app --port 8200
 
     python drive.py            # generate traffic
@@ -45,10 +46,14 @@ app.add_middleware(ObslyMiddleware)
 CART: dict[str, list[dict[str, float]]] = {"c-1": [{"price": 9.99}]}
 
 HERE = pathlib.Path(__file__).parent
-SDK_DIST = HERE.parent.parent / "sdk" / "browser" / "dist"
 
-# The browser half of the demo. Mounted only when the SDK has been built, so a missing `npm
-# run build` is a page that says what to do rather than a stack trace on startup.
+# The published package, not the one in the repository beside it. A demo that imports the SDK
+# out of the monorepo proves the monorepo builds; installing from npm proves what somebody
+# following the README actually receives.
+SDK_DIST = HERE / "node_modules" / "obsly-browser" / "dist"
+
+# Mounted only when it is installed, so a missing `npm install` is a page that says what to do
+# rather than a stack trace on startup.
 if SDK_DIST.is_dir():
     app.mount("/sdk", StaticFiles(directory=SDK_DIST), name="sdk")
 
@@ -62,8 +67,8 @@ def shop() -> str:
     """
     if not SDK_DIST.is_dir():
         return (
-            "<h1>Build the browser SDK first</h1>"
-            "<pre>cd sdk/browser &amp;&amp; npm install &amp;&amp; npm run build</pre>"
+            "<h1>Install the browser SDK first</h1>"
+            "<pre>cd examples/fastapi-demo &amp;&amp; npm install</pre>"
         )
 
     dsn = os.environ.get("OBSLY_DSN", "")

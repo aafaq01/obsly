@@ -12,7 +12,8 @@ application code.
 docker compose up -d                      # Obsly on :8081
 
 cd examples/fastapi-demo
-uv venv && uv pip install -e ../../sdk/python fastapi uvicorn
+uv venv && uv pip install .        # obsly + fastapi, from PyPI
+npm install                       # obsly-browser, from npm
 
 # DSN comes from the project's Settings page in the UI
 OBSLY_DSN="http://<key>@localhost:8081/<project_id>" uv run uvicorn main:app --port 8200
@@ -40,10 +41,11 @@ uv run python drive.py http://127.0.0.1:8200 300
 
 ## The browser half
 
-`/shop` is a page that reports itself. Build the browser SDK first, then open it:
+`/shop` is a page that reports itself. It loads `obsly-browser` from npm, exactly as any
+other site would:
 
 ```bash
-cd sdk/browser && npm install && npm run build     # once
+npm install                       # once, in this directory
 open http://127.0.0.1:8200/shop
 ```
 

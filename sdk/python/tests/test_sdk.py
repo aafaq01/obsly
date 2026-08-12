@@ -13,6 +13,7 @@ from obsly.client import Client
 from obsly.integrations.fastapi import ObslyMiddleware
 from obsly.logs import LogBuffer, ObslyLogHandler
 from obsly.stacktrace import exception_chain
+from obsly.tracing import Transaction
 from obsly.transport import build_envelope
 
 DSN = "http://abc123@localhost:8081/7"
@@ -731,3 +732,25 @@ class TestSqlalchemyIntegration:
             conn.execute(text("SELECT 1"))
 
         assert len([s for s in self.spans(transport) if s["op"] == "db.query"]) == 1
+
+
+def test_a_continued_trace_keeps_the_span_it_continues_from() -> None:
+    """The incoming header is parsed and the parent stored, and it was then dropped on the way
+    back out.
+
+    Both sides shared a trace id with no link between them — which looks correct in a trace
+    holding one request, and says nothing in a page that made four.
+    """
+    transaction = Transaction(
+        op="http.server",
+        description="GET /checkout",
+        trace_id="a" * 32,
+        span_id="c" * 16,
+        parent_span_id="b" * 16,
+        name="GET /checkout",
+    )
+
+    trace = transaction.to_payload()["contexts"]["trace"]
+
+    assert trace["trace_id"] == "a" * 32
+    assert trace["parent_span_id"] == "b" * 16, "the caller's span must survive serialisation"

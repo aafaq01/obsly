@@ -46,3 +46,6 @@ graphify-out/
 # Build artefacts from `uv build` / `npm pack` — regenerated on every release.
 sdk/python/dist/
 sdk/browser/*.tgz
+
+# Installed from npm by the demo, not vendored.
+examples/fastapi-demo/node_modules/
