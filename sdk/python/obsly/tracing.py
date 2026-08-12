@@ -109,6 +109,11 @@ class Transaction(Span):
                 "trace": {
                     "trace_id": self.trace_id,
                     "span_id": self.span_id,
+                    # The span upstream was in when it called us. Parsed from the incoming
+                    # header and then dropped here, so a browser page load and the request it
+                    # made shared a trace id and lost the link between them — with several
+                    # requests in flight, nothing said which fetch caused which.
+                    "parent_span_id": self.parent_span_id,
                     "op": self.op,
                     "status": self.status,
                     "description": self.description,
