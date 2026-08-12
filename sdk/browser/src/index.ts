@@ -146,37 +146,33 @@ function installPageloadReporter(active: Client): void {
 
     const startedAt = new Date(performance.timeOrigin).toISOString()
 
-    sendItems(
-      active,
-      [
-        {
-          type: 'transaction',
-          payload: {
-            event_id: hex(16),
-            transaction: active.options.transactionName(location.href),
-            // The op the vitals aggregate filters on: a backend request has no layout shift,
-            // and mixing the two populations produces a number describing neither.
-            op: 'pageload',
-            start_timestamp: startedAt,
-            timestamp: new Date().toISOString(),
-            environment: active.options.environment,
-            release: active.options.release,
-            contexts: {
-              trace: {
-                trace_id: active.traceId,
-                span_id: active.spanId,
-                op: 'pageload',
-                status: 'ok',
-              },
+    sendItems(active, [
+      {
+        type: 'transaction',
+        payload: {
+          event_id: hex(16),
+          transaction: active.options.transactionName(location.href),
+          // The op the vitals aggregate filters on: a backend request has no layout shift,
+          // and mixing the two populations produces a number describing neither.
+          op: 'pageload',
+          start_timestamp: startedAt,
+          timestamp: new Date().toISOString(),
+          environment: active.options.environment,
+          release: active.options.release,
+          contexts: {
+            trace: {
+              trace_id: active.traceId,
+              span_id: active.spanId,
+              op: 'pageload',
+              status: 'ok',
             },
-            measurements: active.measurements,
-            spans: active.spans,
-            request: { url: location.href },
           },
+          measurements: active.measurements,
+          spans: active.spans,
+          request: { url: location.href },
         },
-      ],
-      { beacon: true },
-    )
+      },
+    ])
   }
 
   // visibilitychange, not unload: on mobile a tab is often frozen without ever firing unload,
@@ -192,9 +188,9 @@ function installPageloadReporter(active: Client): void {
   })
 }
 
-function sendItems(active: Client, items: Item[], { beacon = false } = {}): void {
+function sendItems(active: Client, items: Item[]): void {
   try {
-    send(active.dsn, buildEnvelope(hex(16), items), { beacon })
+    send(active.dsn, buildEnvelope(hex(16), items))
   } catch {
     // Reporting must never throw into the host page.
   }

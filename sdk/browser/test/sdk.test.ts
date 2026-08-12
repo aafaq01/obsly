@@ -221,31 +221,48 @@ describe('Transport', () => {
   })
 
   it('never sends cookies', () => {
-    // Carrying a customer's session cookie to our origin would be a hole in their site.
+    // Carrying a customer's session cookie to our origin would be a hole in their site — and
+    // "include" is also what makes the server's wildcard CORS origin illegal, so this is the
+    // line that keeps cross-origin reporting working at all.
     send(parseDsn(DSN), 'body')
 
     const mock = globalThis.fetch as unknown as ReturnType<typeof fetchMock>
     expect(mock.mock.calls[0]![1]?.credentials).toBe('omit')
   })
 
-  it('uses a beacon when the page is going away', () => {
-    // pagehide is exactly when the numbers matter and exactly when fetch is cancelled.
+  it('outlives the page it was sent from', () => {
+    // A report sent on tab-hide is cancelled mid-flight without this, which loses exactly the
+    // page loads worth measuring.
+    send(parseDsn(DSN), 'body')
+
+    const mock = globalThis.fetch as unknown as ReturnType<typeof fetchMock>
+    expect(mock.mock.calls[0]![1]?.keepalive).toBe(true)
+  })
+
+  it('never uses sendBeacon', () => {
+    // A beacon always sends credentials mode "include", so every cross-origin one is rejected
+    // at the preflight against a wildcard origin — which is every real deployment. It also
+    // returns true the moment the request is queued, so the CORS failure is unobservable and
+    // no fallback behind that return value can ever run. Found in a real browser; jsdom
+    // enforces no CORS and reported success.
     const beacon = vi.fn(() => true)
     Object.defineProperty(navigator, 'sendBeacon', { value: beacon, configurable: true })
 
-    send(parseDsn(DSN), 'body', { beacon: true })
+    send(parseDsn(DSN), 'body')
 
-    expect(beacon).toHaveBeenCalled()
-    expect(globalThis.fetch).not.toHaveBeenCalled()
+    expect(beacon).not.toHaveBeenCalled()
+    expect(globalThis.fetch).toHaveBeenCalled()
   })
 
-  it('falls back to fetch when the beacon is refused', () => {
-    // Browsers reject a beacon over their size limit; losing the event silently would be worse.
-    Object.defineProperty(navigator, 'sendBeacon', { value: () => false, configurable: true })
+  it('puts the key in a header, not the URL', () => {
+    // The query string was only there because a beacon cannot set headers. A URL is what ends
+    // up in access logs and referrer headers.
+    send(parseDsn(DSN), 'body')
 
-    send(parseDsn(DSN), 'body', { beacon: true })
-
-    expect(globalThis.fetch).toHaveBeenCalled()
+    const mock = globalThis.fetch as unknown as ReturnType<typeof fetchMock>
+    const [url, init] = mock.mock.calls[0]!
+    expect(String(url)).not.toContain('abc123')
+    expect(new Headers(init?.headers).get('X-Obsly-Key')).toBe('abc123')
   })
 
   it('swallows a transport failure rather than throwing into the page', () => {

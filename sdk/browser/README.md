@@ -43,9 +43,15 @@ draw a nicer waterfall is the wrong trade — pass `shouldTrace` if you own both
 Carrying a customer's session cookie to our origin would be a hole in their site.
 
 **Vitals are reported on `visibilitychange`, not `unload`.** On mobile a tab is frequently
-frozen without ever firing `unload`, and those page loads would simply never be measured. The
-send uses `sendBeacon`, which survives the page going away — a load that ended in the reader
-leaving is exactly the load worth measuring.
+frozen without ever firing `unload`, and those page loads would simply never be measured.
+
+**The send is `fetch` with `keepalive`, never `sendBeacon`.** A beacon is the obvious choice and
+the wrong one: it always sends with credentials mode `include`, and CORS forbids a wildcard
+`Access-Control-Allow-Origin` for a credentialed request — so every cross-origin beacon is
+rejected at the preflight, which is every real deployment. It also returns `true` as soon as the
+request is queued, so the failure is unobservable and no fallback behind that return value can
+run. `keepalive` outlives the document the same way, takes headers, and lets credentials be
+turned off.
 
 ## Options
 

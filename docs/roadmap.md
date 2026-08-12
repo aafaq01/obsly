@@ -38,6 +38,7 @@ linters and type checks are green in CI.
 | 29 | `feat/sdk-browser` | Browser SDK: errors, Core Web Vitals, one trace from paint to query |
 | 30 | `feat/browser-demo` | A demo page that reports itself, so the browser half is clickable |
 | 31 | `feat/releases` | Per-release health, adoption, and which version introduced an issue |
+| 32 | `fix/vitals-never-arrive` | Browser reports were blocked cross-origin by a credentialed beacon |
 
 ## Planned
 
