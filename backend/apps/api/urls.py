@@ -40,6 +40,7 @@ urlpatterns = [
         name="performance",
     ),
     path("projects/<int:project_id>/traces/", views.TraceListView.as_view(), name="traces"),
+    path("projects/<int:project_id>/vitals/", views.WebVitalsView.as_view(), name="vitals"),
     path("projects/<int:project_id>/logs/", views.LogListView.as_view(), name="logs"),
     path("projects/<int:project_id>/spans/", views.SpanInsightsView.as_view(), name="spans"),
     path(

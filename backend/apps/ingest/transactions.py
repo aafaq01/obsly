@@ -4,6 +4,7 @@ Same posture as event normalisation: the payload is hostile, nothing raises, eve
 degrades. A span with a broken timestamp costs that span, not the transaction it sits in.
 """
 
+import math
 import uuid
 from datetime import datetime, timedelta
 from typing import Any
@@ -58,10 +59,44 @@ def transaction_from_payload(
         duration_ms=duration,
         environment=_text(payload.get("environment"), 64),
         release=_text(payload.get("release"), 128),
+        measurements=_measurements(payload.get("measurements")),
         payload=payload,
     )
 
     return transaction, _spans(transaction, payload.get("spans"), now=now)
+
+
+MAX_MEASUREMENTS = 30
+
+# Vitals are milliseconds except CLS, which is a unitless ratio. Storing the unit alongside the
+# value is what stops a chart from labelling a 0.08 layout shift as "0.08ms".
+DEFAULT_UNIT = "millisecond"
+
+
+def _measurements(raw: Any) -> dict[str, dict[str, Any]]:
+    """Web vitals and friends, keyed by name.
+
+    Same posture as everything else on this path: a browser sends what it likes, and one
+    unusable entry costs that entry rather than the transaction carrying it.
+    """
+    if not isinstance(raw, dict):
+        return {}
+
+    kept: dict[str, dict[str, Any]] = {}
+    for name, entry in list(raw.items())[:MAX_MEASUREMENTS]:
+        if not isinstance(entry, dict):
+            continue
+        value = entry.get("value")
+        if not isinstance(value, int | float) or isinstance(value, bool):
+            continue
+        # NaN and infinity survive JSON parsing and poison every aggregate they reach.
+        if not math.isfinite(value) or value < 0:
+            continue
+        kept[_text(name, 32)] = {
+            "value": float(value),
+            "unit": _text(entry.get("unit"), 24) or DEFAULT_UNIT,
+        }
+    return kept
 
 
 def _spans(transaction: Transaction, raw: Any, *, now: datetime) -> list[Span]:

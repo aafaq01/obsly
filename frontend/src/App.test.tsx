@@ -1836,3 +1836,99 @@ describe('Alerts', () => {
     })
   })
 })
+
+describe('Web Vitals', () => {
+  const VITALS = {
+    period: '24h',
+    pageloads: 120,
+    vitals: [
+      {
+        key: 'lcp',
+        label: 'LCP',
+        explains: 'Largest Contentful Paint — when the main content finished drawing',
+        value: 3200,
+        samples: 120,
+        rating: 'needs-improvement' as const,
+        good_below: 2500,
+        poor_above: 4000,
+        unit: 'millisecond',
+      },
+      {
+        key: 'cls',
+        label: 'CLS',
+        explains: 'Cumulative Layout Shift — how much the page moved under the reader',
+        value: 0.083,
+        samples: 120,
+        rating: 'good' as const,
+        good_below: 0.1,
+        poor_above: 0.25,
+        unit: '',
+      },
+      {
+        key: 'inp',
+        label: 'INP',
+        explains: 'Interaction to Next Paint — how long the page takes to answer a click',
+        value: null,
+        samples: 0,
+        rating: 'none' as const,
+        good_below: 200,
+        poor_above: 500,
+        unit: 'millisecond',
+      },
+    ],
+    pages: [
+      { name: '/checkout', count: 40, lcp: 5200, cls: 0.2, inp: null, rating: 'poor' },
+      { name: '/', count: 80, lcp: 1100, cls: 0.01, inp: 90, rating: 'good' },
+    ],
+  }
+
+  function mount(body: unknown) {
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/1/': { body: { ...PROJECT, keys: [] } },
+      '/projects/1/vitals/': { body },
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/projects/1/vitals']}>
+        <App />
+      </MemoryRouter>,
+    )
+  }
+
+  it('says a vital was never reported rather than showing it as passing', async () => {
+    // Green because nothing was measured is the most dangerous reading this page can give.
+    mount(VITALS)
+
+    expect(await screen.findByText('no data')).toBeInTheDocument()
+  })
+
+  it('keeps CLS as a ratio rather than labelling it milliseconds', async () => {
+    mount(VITALS)
+
+    expect(await screen.findByText('0.083')).toBeInTheDocument()
+    expect(screen.queryByText('0.083ms')).not.toBeInTheDocument()
+  })
+
+  it('states the thresholds instead of leaving them to the colour', async () => {
+    // A reader who does not already know the bands cannot act on a green box.
+    mount(VITALS)
+
+    expect(await screen.findByText(/good ≤ 2\.50s · poor > 4\.00s/)).toBeInTheDocument()
+  })
+
+  it('ranks pages by their worst LCP, not by traffic', async () => {
+    mount(VITALS)
+
+    await screen.findByText('/checkout')
+    const rows = document.querySelectorAll('tbody tr')
+    // /checkout has half the traffic of / and comes first.
+    expect(rows[0]!.textContent).toContain('/checkout')
+  })
+
+  it('explains where the numbers come from when there are none', async () => {
+    mount({ ...VITALS, pageloads: 0, pages: [] })
+
+    expect(await screen.findByText(/browser SDK/)).toBeInTheDocument()
+  })
+})

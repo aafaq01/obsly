@@ -16,10 +16,11 @@ from django.conf import settings
 from django.db import transaction
 from django.http import HttpRequest, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_http_methods
 
 from apps.events.models import Event
 from apps.ingest import envelope as envelope_parser
+from apps.ingest.auth import HEADER as KEY_HEADER
 from apps.ingest.auth import AuthenticationError, authenticate
 from apps.ingest.logs import logs_from_payload
 from apps.ingest.normalize import event_from_payload
@@ -36,20 +37,44 @@ TRANSACTION_ITEM = "transaction"
 LOG_ITEM = "log"
 
 
+# The browser SDK posts from the customer's own origin, which is never ours. Without these
+# the preflight fails and no browser event ever arrives — and unlike a server SDK there is no
+# way for the page to work around it.
+#
+# `*` is correct here rather than lax: the DSN public key is the credential, it is designed to
+# ship in a public bundle, and the endpoint is write-only. Restricting the origin would protect
+# nothing and would break every customer origin we do not know about in advance.
+CORS_HEADERS = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": f"Content-Type, {KEY_HEADER}",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Max-Age": "86400",
+}
+
+
+def _cors(response: JsonResponse) -> JsonResponse:
+    for name, value in CORS_HEADERS.items():
+        response[name] = value
+    return response
+
+
 @csrf_exempt  # SDKs are not browsers with our cookies; the DSN key is the credential.
-@require_POST
+@require_http_methods(["POST", "OPTIONS"])
 def envelope(request: HttpRequest, project_id: int) -> JsonResponse:
+    if request.method == "OPTIONS":
+        return _cors(JsonResponse({}, status=204))
+
     try:
         key = authenticate(request, project_id)
     except AuthenticationError as exc:
-        return JsonResponse({"detail": str(exc)}, status=401)
+        return _cors(JsonResponse({"detail": str(exc)}, status=401))
 
     try:
         parsed = envelope_parser.parse(request.body, max_bytes=settings.OBSLY_MAX_ENVELOPE_BYTES)
     except envelope_parser.EnvelopeTooLargeError as exc:
-        return JsonResponse({"detail": str(exc)}, status=413)
+        return _cors(JsonResponse({"detail": str(exc)}, status=413))
     except envelope_parser.EnvelopeError as exc:
-        return JsonResponse({"detail": str(exc)}, status=400)
+        return _cors(JsonResponse({"detail": str(exc)}, status=400))
 
     now = datetime.now(tz=UTC)
     events: list[Event] = []
@@ -142,14 +167,16 @@ def envelope(request: HttpRequest, project_id: int) -> JsonResponse:
             "ingest: dropped %d malformed item(s) for project %s", len(rejected), project_id
         )
 
-    return JsonResponse(
-        {
-            "accepted": len(stored) + len(stored_transactions) + stored_logs,
-            "rejected": rejected,
-            "event_ids": [str(event.pk) for event in stored],
-            "transaction_ids": [str(txn.pk) for txn in stored_transactions],
-        },
-        status=200,
+    return _cors(
+        JsonResponse(
+            {
+                "accepted": len(stored) + len(stored_transactions) + stored_logs,
+                "rejected": rejected,
+                "event_ids": [str(event.pk) for event in stored],
+                "transaction_ids": [str(txn.pk) for txn in stored_transactions],
+            },
+            status=200,
+        )
     )
 
 

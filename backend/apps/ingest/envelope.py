@@ -49,10 +49,20 @@ class Envelope:
         return [item for item in self.items if item.type == item_type]
 
 
+def _reject_constant(name: str) -> Any:
+    """NaN, Infinity and -Infinity are not JSON, but Python's parser accepts them anyway.
+
+    Postgres does not, and the payload is stored verbatim — so one of these anywhere in an
+    item turned the whole request into a 500. Raising here makes it a rejected item instead,
+    which is what every other malformed payload already gets.
+    """
+    raise ValueError(f"{name} is not a JSON value")
+
+
 def _load_object(raw: bytes, what: str) -> dict[str, Any]:
     try:
-        value = json.loads(raw)
-    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        value = json.loads(raw, parse_constant=_reject_constant)
+    except (json.JSONDecodeError, UnicodeDecodeError, ValueError) as exc:
         raise EnvelopeError(f"{what} is not valid JSON: {exc}") from exc
     if not isinstance(value, dict):
         raise EnvelopeError(f"{what} must be a JSON object, got {type(value).__name__}")

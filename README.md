@@ -58,6 +58,38 @@ because it serves plain HTTP — without that, the SSL redirect would bounce eve
 `Secure` cookies would never reach the browser. Never set `DJANGO_HTTPS=False` on anything
 internet-facing.
 
+## Instrumenting an application
+
+Two SDKs, one wire protocol and one trace.
+
+**Backend** ([sdk/python](sdk/python)) — zero runtime dependencies:
+
+```python
+import obsly
+obsly.init(dsn="https://<public key>@localhost:8081/1", release="api@2026.08.12")
+```
+
+**Browser** ([sdk/browser](sdk/browser)) — zero runtime dependencies:
+
+```ts
+import { init } from '@obsly/browser'
+init({ dsn: 'https://<public key>@localhost:8081/1', release: 'web@2026.08.12' })
+```
+
+The browser SDK puts an `obsly-trace` header on same-origin requests and the Python SDK reads
+it, so one waterfall holds the whole story:
+
+```
+pageload     /checkout               2000.0ms   (root)
+    └─ http.client  POST /api/checkout           900.0ms
+http.server  POST /api/checkout       700.0ms   parent = that http.client span
+    └─ db.query     SELECT * FROM carts WHERE id = %s   400.0ms
+```
+
+That is the point of the project stated in four lines: the paint the reader waited for, the
+request it caused, and the query that made it slow, joined by ids rather than by comparing
+timestamps across three tools.
+
 ## Development
 
 For hot reload, run the services directly. Requires Python 3.12+, Node 22+, and

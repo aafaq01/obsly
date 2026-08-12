@@ -8,6 +8,7 @@ const TABS = [
   { to: 'issues', label: 'Issues' },
   { to: 'performance', label: 'Performance' },
   { to: 'traces', label: 'Traces' },
+  { to: 'vitals', label: 'Web Vitals' },
   { to: 'spans', label: 'Spans' },
   { to: 'logs', label: 'Logs' },
   { to: 'alerts', label: 'Alerts' },

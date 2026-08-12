@@ -35,6 +35,7 @@ linters and type checks are green in CI.
 | 26 | `feat/endpoint-detail` | Clickable endpoints: where one endpoint's time actually goes |
 | 27 | `feat/chart-timestamps` | Charts read in clock time and say what they measure |
 | 28 | `feat/alerts` | New-issue, regression and frequency rules with webhook delivery |
+| 29 | `feat/sdk-browser` | Browser SDK: errors, Core Web Vitals, one trace from paint to query |
 
 ## Planned
 
@@ -47,7 +48,7 @@ already run into.
 | `feat/releases` | Release health, crash-free rate, suspect commits | `release` is already on every signal; nothing aggregates by it yet |
 | `feat/teams` | Membership, roles, per-project access | Every signed-in user currently sees every project |
 | `feat/quotas` | Per-project rate limits, spike protection | One runaway loop can currently fill the database — and now also fire an alert per event until its cooldown catches it |
-| `feat/sdk-browser` | Browser SDK: `onerror`, web vitals, source maps | Everything so far is backend-only. This is the next one: an error in the browser and the request it made are currently two unrelated facts |
+| `feat/source-maps` | Upload and apply source maps to browser stack traces | The browser SDK reports minified frames today, and `a.js:1:48291` names no line anyone can open |
 | `feat/search` | A query language across issues, spans and logs | Filters are per-page and fixed |
 
 ## On metrics
