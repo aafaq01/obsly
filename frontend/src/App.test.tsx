@@ -35,6 +35,84 @@ function mockApi(routes: Record<string, Route>) {
   return fetchMock
 }
 
+const VITALS_FIXTURE = {
+  period: '24h',
+  pageloads: 120,
+  bucket_seconds: 3600,
+  series_start: new Date().toISOString(),
+  vitals: [
+    {
+      key: 'lcp',
+      label: 'LCP',
+      explains: 'Largest Contentful Paint — when the main content finished drawing',
+      value: 3200,
+      samples: 120,
+      rating: 'needs-improvement' as const,
+      good_below: 2500,
+      poor_above: 4000,
+      unit: 'millisecond',
+      distribution: { good: 40, needs_improvement: 60, poor: 20, total: 120 },
+      trend: [3200],
+    },
+    {
+      key: 'cls',
+      label: 'CLS',
+      explains: 'Cumulative Layout Shift — how much the page moved under the reader',
+      value: 0.083,
+      samples: 120,
+      rating: 'good' as const,
+      good_below: 0.1,
+      poor_above: 0.25,
+      unit: '',
+      distribution: { good: 110, needs_improvement: 10, poor: 0, total: 120 },
+      trend: [0.083],
+    },
+    {
+      key: 'inp',
+      label: 'INP',
+      explains: 'Interaction to Next Paint — how long the page takes to answer a click',
+      value: null,
+      samples: 0,
+      rating: 'none' as const,
+      good_below: 200,
+      poor_above: 500,
+      unit: 'millisecond',
+      distribution: { good: 0, needs_improvement: 0, poor: 0, total: 0 },
+      trend: [null],
+    },
+  ],
+  worst: [
+    {
+      transaction_id: 'w-1',
+      name: '/checkout',
+      lcp: 7200,
+      cls: 0.31,
+      inp: 620,
+      timestamp: new Date(Date.now() - 300_000).toISOString(),
+      trace_id: 'a'.repeat(32),
+      release: 'web@1.0.0',
+      rating: 'poor',
+    },
+  ],
+  pages: [
+    { name: '/checkout', count: 40, lcp: 5200, cls: 0.2, inp: null, rating: 'poor' },
+    { name: '/', count: 80, lcp: 1100, cls: 0.01, inp: 90, rating: 'good' },
+  ],
+}
+
+const DB_STATEMENT = {
+  description: 'SELECT 1 FROM carts',
+  op: 'db.query',
+  count: 10,
+  requests: 2,
+  per_request: 5,
+  total_ms: 100,
+  p50: 9,
+  p95: 12,
+  slowest: 14,
+  table: 'carts',
+}
+
 const PROJECT = {
   id: 1,
   name: 'Checkout',
@@ -1485,38 +1563,42 @@ describe('Rank charts', () => {
     expect(widths[1]).toBe('10%')
   })
 
-  it('links a span bar into its detail page', async () => {
+  it('links a statement into its detail page', async () => {
     mockApi({
       '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/': { body: [PROJECT] },
       '/projects/1/': { body: { ...PROJECT, keys: [] } },
-      '/projects/1/spans/': {
+      '/projects/1/database/': {
         body: {
           period: '24h',
-          ops: ['db.query'],
-          spans: [
-            {
-              op: 'db.query',
-              description: 'SELECT 1',
-              count: 10,
-              transactions: 2,
-              per_transaction: 5,
-              throughput_per_minute: 0.1,
-              total_ms: 100,
-              p50: 9,
-              p95: 12,
-            },
-          ],
+          bucket_seconds: 3600,
+          series_start: new Date().toISOString(),
+          headline: {
+            queries: 10,
+            requests: 2,
+            per_request: 5,
+            total_ms: 100,
+            p50: 9,
+            p95: 12,
+            p99: 12,
+            slowest: 14,
+          },
+          series: { throughput: [10], p95: [12] },
+          slowest: [DB_STATEMENT],
+          heaviest: [DB_STATEMENT],
+          tables: [],
+          repeated: [],
         },
       },
     })
 
     render(
-      <MemoryRouter initialEntries={['/projects/1/spans']}>
+      <MemoryRouter initialEntries={['/projects/1/insights/database']}>
         <App />
       </MemoryRouter>,
     )
 
-    await screen.findByText(/Bar length is time spent/)
+    await screen.findByRole('heading', { name: 'Database' })
     const links = screen.getAllByRole('link').map((a) => a.getAttribute('href'))
     expect(links.some((href) => href?.includes('/projects/1/span?'))).toBe(true)
   })
@@ -1554,35 +1636,39 @@ describe('Review findings', () => {
     expect(await screen.findByRole('heading', { name: 'Issues' })).toBeInTheDocument()
   })
 
-  it('ranked bars navigate in-app rather than reloading the page', async () => {
+  it('a statement navigates in-app rather than reloading the page', async () => {
     // A raw <a href> full-page-reloads an SPA. An href-only assertion passes either way, which
     // is why this asserts the navigation actually happened.
     mockApi({
       '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/': { body: [PROJECT] },
       '/projects/1/': { body: { ...PROJECT, keys: [] } },
-      '/projects/1/spans/': {
+      '/projects/1/database/': {
         body: {
           period: '24h',
-          ops: ['db.query'],
-          spans: [
-            {
-              op: 'db.query',
-              description: 'SELECT 1',
-              count: 10,
-              transactions: 2,
-              per_transaction: 5,
-              throughput_per_minute: 0.1,
-              total_ms: 100,
-              p50: 9,
-              p95: 12,
-            },
-          ],
+          bucket_seconds: 3600,
+          series_start: new Date().toISOString(),
+          headline: {
+            queries: 10,
+            requests: 2,
+            per_request: 5,
+            total_ms: 100,
+            p50: 9,
+            p95: 12,
+            p99: 12,
+            slowest: 14,
+          },
+          series: { throughput: [10], p95: [12] },
+          slowest: [DB_STATEMENT],
+          heaviest: [DB_STATEMENT],
+          tables: [],
+          repeated: [],
         },
       },
       '/projects/1/span/': {
         body: {
           op: 'db.query',
-          description: 'SELECT 1',
+          description: 'SELECT 1 FROM carts',
           period: '24h',
           summary: {
             count: 10,
@@ -1602,13 +1688,13 @@ describe('Review findings', () => {
     })
 
     render(
-      <MemoryRouter initialEntries={['/projects/1/spans']}>
+      <MemoryRouter initialEntries={['/projects/1/insights/database']}>
         <App />
       </MemoryRouter>,
     )
 
-    const chart = await screen.findByRole('figure')
-    await userEvent.click(within(chart).getByRole('link'))
+    await screen.findByRole('heading', { name: 'Database' })
+    await userEvent.click(screen.getAllByRole('link', { name: 'SELECT 1 FROM carts' })[0]!)
 
     expect(await screen.findByText('How long these calls take')).toBeInTheDocument()
   })
@@ -1864,50 +1950,6 @@ describe('Alerts', () => {
 })
 
 describe('Web Vitals', () => {
-  const VITALS = {
-    period: '24h',
-    pageloads: 120,
-    vitals: [
-      {
-        key: 'lcp',
-        label: 'LCP',
-        explains: 'Largest Contentful Paint — when the main content finished drawing',
-        value: 3200,
-        samples: 120,
-        rating: 'needs-improvement' as const,
-        good_below: 2500,
-        poor_above: 4000,
-        unit: 'millisecond',
-      },
-      {
-        key: 'cls',
-        label: 'CLS',
-        explains: 'Cumulative Layout Shift — how much the page moved under the reader',
-        value: 0.083,
-        samples: 120,
-        rating: 'good' as const,
-        good_below: 0.1,
-        poor_above: 0.25,
-        unit: '',
-      },
-      {
-        key: 'inp',
-        label: 'INP',
-        explains: 'Interaction to Next Paint — how long the page takes to answer a click',
-        value: null,
-        samples: 0,
-        rating: 'none' as const,
-        good_below: 200,
-        poor_above: 500,
-        unit: 'millisecond',
-      },
-    ],
-    pages: [
-      { name: '/checkout', count: 40, lcp: 5200, cls: 0.2, inp: null, rating: 'poor' },
-      { name: '/', count: 80, lcp: 1100, cls: 0.01, inp: 90, rating: 'good' },
-    ],
-  }
-
   function mount(body: unknown) {
     mockApi({
       '/me/': { body: { authenticated: true, username: 'admin' } },
@@ -1924,13 +1966,13 @@ describe('Web Vitals', () => {
 
   it('says a vital was never reported rather than showing it as passing', async () => {
     // Green because nothing was measured is the most dangerous reading this page can give.
-    mount(VITALS)
+    mount(VITALS_FIXTURE)
 
     expect(await screen.findByText('no data')).toBeInTheDocument()
   })
 
   it('keeps CLS as a ratio rather than labelling it milliseconds', async () => {
-    mount(VITALS)
+    mount(VITALS_FIXTURE)
 
     expect(await screen.findByText('0.083')).toBeInTheDocument()
     expect(screen.queryByText('0.083ms')).not.toBeInTheDocument()
@@ -1938,22 +1980,24 @@ describe('Web Vitals', () => {
 
   it('states the thresholds instead of leaving them to the colour', async () => {
     // A reader who does not already know the bands cannot act on a green box.
-    mount(VITALS)
+    mount(VITALS_FIXTURE)
 
     expect(await screen.findByText(/good ≤ 2\.50s · poor > 4\.00s/)).toBeInTheDocument()
   })
 
   it('ranks pages by their worst LCP, not by traffic', async () => {
-    mount(VITALS)
+    mount(VITALS_FIXTURE)
 
-    await screen.findByText('/checkout')
-    const rows = document.querySelectorAll('tbody tr')
+    await screen.findAllByText('/checkout')
+    // The last table on the page is the per-page ranking; the first is individual loads.
+    const tables = document.querySelectorAll('table')
+    const rows = tables[tables.length - 1]!.querySelectorAll('tbody tr')
     // /checkout has half the traffic of / and comes first.
     expect(rows[0]!.textContent).toContain('/checkout')
   })
 
   it('explains where the numbers come from when there are none', async () => {
-    mount({ ...VITALS, pageloads: 0, pages: [] })
+    mount({ ...VITALS_FIXTURE, pageloads: 0, pages: [], worst: [] })
 
     expect(await screen.findByText(/browser SDK/)).toBeInTheDocument()
   })
@@ -2093,25 +2137,100 @@ describe('Insights layers', () => {
     )
   }
 
-  it('the Database page shows only database spans', async () => {
-    // A nav item called Database that lists http.client makes the whole grouping a lie.
-    mount('/projects/1/insights/database')
+  it('the Database page ranks by p95 and by total time separately', async () => {
+    // The slowest query and the most expensive query are usually different statements with
+    // different fixes, and one ranking called "top queries" sends people to the wrong one.
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/': { body: [PROJECT] },
+      '/projects/1/': { body: { ...PROJECT, keys: [] } },
+      '/projects/1/database/': {
+        body: {
+          period: '24h',
+          bucket_seconds: 3600,
+          series_start: new Date().toISOString(),
+          headline: {
+            queries: 70,
+            requests: 61,
+            per_request: 1.1,
+            total_ms: 2100,
+            p50: 20,
+            p95: 800,
+            p99: 900,
+            slowest: 900,
+          },
+          series: { throughput: [70], p95: [800] },
+          slowest: [{ ...DB_STATEMENT, description: 'SELECT * FROM analytics_rollup', p95: 900 }],
+          heaviest: [{ ...DB_STATEMENT, description: 'SELECT * FROM carts', total_ms: 1200 }],
+          tables: [],
+          repeated: [],
+        },
+      },
+    })
 
-    expect(await screen.findByRole('heading', { name: 'Database' })).toBeInTheDocument()
-    // Twice over: the ranked chart and the table below it both list it.
-    expect(screen.getAllByText('SELECT * FROM carts WHERE id = %s').length).toBeGreaterThan(0)
-    expect(screen.queryAllByText('POST payments.example.com/charge')).toHaveLength(0)
-    expect(screen.queryAllByText('search:results')).toHaveLength(0)
+    render(
+      <MemoryRouter initialEntries={['/projects/1/insights/database']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('SELECT * FROM analytics_rollup')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'By total time' }))
+    expect(screen.getByText('SELECT * FROM carts')).toBeInTheDocument()
   })
 
-  it('the Database operation filter offers only database operations', async () => {
-    // A filter listing ops the page will never show is a control that does nothing.
-    mount('/projects/1/insights/database')
+  it('surfaces a query called once per row, which neither ranking would show', async () => {
+    // Each call is fast, which is exactly why the pattern survives review.
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/': { body: [PROJECT] },
+      '/projects/1/': { body: { ...PROJECT, keys: [] } },
+      '/projects/1/database/': {
+        body: {
+          period: '24h',
+          bucket_seconds: 3600,
+          series_start: new Date().toISOString(),
+          headline: {
+            queries: 25,
+            requests: 1,
+            per_request: 25,
+            total_ms: 50,
+            p50: 2,
+            p95: 2,
+            p99: 2,
+            slowest: 3,
+          },
+          series: { throughput: [25], p95: [2] },
+          slowest: [DB_STATEMENT],
+          heaviest: [DB_STATEMENT],
+          tables: [],
+          repeated: [
+            {
+              description: 'SELECT total FROM orders WHERE id = %s',
+              op: 'db.query',
+              per_request: 25,
+              count: 25,
+              requests: 1,
+              total_ms: 50,
+              wasted_ms: 48,
+              table: 'orders',
+            },
+          ],
+        },
+      },
+    })
 
-    await screen.findByRole('heading', { name: 'Database' })
-    const options = [...document.querySelectorAll('option')].map((o) => o.textContent)
-    expect(options).toContain('db.query')
-    expect(options).not.toContain('http.client')
+    render(
+      <MemoryRouter initialEntries={['/projects/1/insights/database']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('Called once per row')).toBeInTheDocument()
+    expect(screen.getByText('SELECT total FROM orders WHERE id = %s')).toBeInTheDocument()
+    // What collapsing the loop would give back, not the whole total.
+    expect(screen.getByText('48ms')).toBeInTheDocument()
   })
 
   it('the Cache page shows only cache spans', async () => {
@@ -2259,5 +2378,65 @@ describe('Trace waterfall grouping', () => {
     )
 
     expect(await screen.findAllByText('3×')).toHaveLength(2)
+  })
+})
+
+describe('Web Vitals depth', () => {
+  it('shows how the visits split across the bands, not just the p75', async () => {
+    // Two sites can share a p75 while a completely different share of visitors is having a bad
+    // time, and the share is what says how many people that is.
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/': { body: [PROJECT] },
+      '/projects/1/': { body: { ...PROJECT, keys: [] } },
+      '/projects/1/vitals/': { body: VITALS_FIXTURE },
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/projects/1/insights/frontend']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    // 40 of 120 good, 20 of 120 poor.
+    expect(await screen.findByText(/33% good · 17% poor · 120 visits/)).toBeInTheDocument()
+  })
+
+  it('offers individual slow loads, because an aggregate cannot be debugged', async () => {
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/': { body: [PROJECT] },
+      '/projects/1/': { body: { ...PROJECT, keys: [] } },
+      '/projects/1/vitals/': { body: VITALS_FIXTURE },
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/projects/1/insights/frontend']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    const link = await screen.findByRole('link', { name: '/checkout' })
+    expect(link).toHaveAttribute('href', '/projects/1/traces/w-1')
+  })
+
+  it('draws no band split for a vital nobody reported', async () => {
+    // An empty bar reads as "all good"; the card already says "no data".
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/': { body: [PROJECT] },
+      '/projects/1/': { body: { ...PROJECT, keys: [] } },
+      '/projects/1/vitals/': { body: VITALS_FIXTURE },
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/projects/1/insights/frontend']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    await screen.findByText('no data')
+    // Three vitals in the fixture, one of them unmeasured.
+    expect(document.querySelectorAll('.bands')).toHaveLength(2)
   })
 })

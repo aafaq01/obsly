@@ -25,8 +25,8 @@ pytestmark = pytest.mark.django_db
 NOW = timezone.now()
 
 
-def pageload(project: Project, name: str, **vitals: float) -> Transaction:
-    when = NOW - timedelta(minutes=5)
+def pageload(project: Project, name: str, *, minutes_ago: int = 5, **vitals: float) -> Transaction:
+    when = NOW - timedelta(minutes=minutes_ago)
     return Transaction.objects.create(
         project=project,
         trace_id=f"{hash(name) & 0xFFFFFFFF:032x}",
@@ -313,3 +313,74 @@ class TestBrowserAccess:
 
         assert response.status_code == 401
         assert response["Access-Control-Allow-Origin"] == "*"
+
+
+class TestDepth:
+    """A p75 is one point on a distribution. Two sites can share it with a completely different
+    share of visitors having a bad time, and the share is what says how many people it is."""
+
+    def test_the_bands_split_the_page_loads(self, staff_client: Client, project: Project) -> None:
+        for _ in range(6):
+            pageload(project, "/", lcp=1000)  # good
+        for _ in range(3):
+            pageload(project, "/", lcp=3000)  # needs improvement
+        pageload(project, "/", lcp=9000)  # poor
+
+        [lcp] = [row for row in vitals_of(staff_client, project)["vitals"] if row["key"] == "lcp"]
+
+        assert lcp["distribution"] == {
+            "good": 6,
+            "needs_improvement": 3,
+            "poor": 1,
+            "total": 10,
+        }
+
+    def test_the_middle_band_is_the_remainder_not_a_third_threshold(
+        self, staff_client: Client, project: Project
+    ) -> None:
+        """Defined by the two edges. A third number could disagree with them and put a visit in
+        no band at all."""
+        pageload(project, "/", lcp=2500)  # exactly the good edge
+        pageload(project, "/", lcp=4000)  # exactly the poor edge, so not yet poor
+
+        [lcp] = [row for row in vitals_of(staff_client, project)["vitals"] if row["key"] == "lcp"]
+
+        assert lcp["distribution"]["good"] == 1
+        assert lcp["distribution"]["needs_improvement"] == 1
+        assert lcp["distribution"]["poor"] == 0
+
+    def test_a_quiet_bucket_is_a_gap_not_a_perfect_score(
+        self, staff_client: Client, project: Project
+    ) -> None:
+        """Drawing an hour with no page loads as zero renders an outage as a perfect LCP."""
+        pageload(project, "/", lcp=1000, minutes_ago=5)
+
+        [lcp] = [row for row in vitals_of(staff_client, project)["vitals"] if row["key"] == "lcp"]
+
+        assert None in lcp["trend"], "empty buckets must be gaps"
+        assert any(value is not None for value in lcp["trend"])
+
+    def test_the_worst_page_loads_are_openable(
+        self, staff_client: Client, project: Project
+    ) -> None:
+        """Every other number on the page is an aggregate, and an aggregate cannot be
+        debugged — at some point you need one slow load and its trace."""
+        pageload(project, "/fast", lcp=800)
+        pageload(project, "/checkout", lcp=7000, cls=0.3)
+
+        worst = vitals_of(staff_client, project)["worst"]
+
+        assert worst[0]["name"] == "/checkout"
+        assert worst[0]["transaction_id"]
+        assert worst[0]["rating"] == "poor"
+        assert worst[0]["cls"] == pytest.approx(0.3)
+
+    def test_a_vital_nobody_reported_has_an_empty_distribution(
+        self, staff_client: Client, project: Project
+    ) -> None:
+        pageload(project, "/", lcp=1000)
+
+        [inp] = [row for row in vitals_of(staff_client, project)["vitals"] if row["key"] == "inp"]
+
+        assert inp["distribution"]["total"] == 0
+        assert inp["rating"] == "none"

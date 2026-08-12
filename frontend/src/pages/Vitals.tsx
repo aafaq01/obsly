@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
-import { useParams, useSearchParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 
 import { api, type WebVitals } from '../api'
 import { Notice, Skeleton } from '../components/Notice'
 import { handle } from '../errors'
 import { formatMs } from '../format'
 import { periodLabel } from '../periods'
+import { relativeTime } from '../time'
 
 /**
  * Core Web Vitals.
@@ -69,6 +70,46 @@ export function Vitals() {
           </div>
 
           <div className="section">
+            <h2 className="section__title">Slowest page loads</h2>
+            <p className="chart2__caption">
+              Individual visits, not an average of them. Every other number on this page is an
+              aggregate, and an aggregate cannot be debugged — at some point you need one slow load
+              and the trace behind it.
+            </p>
+            <div className="card">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Page</th>
+                    <th className="num strong">LCP</th>
+                    <th className="num">CLS</th>
+                    <th className="num">INP</th>
+                    <th>Release</th>
+                    <th className="num">When</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.worst.map((load) => (
+                    <tr key={load.transaction_id}>
+                      <td className="mono">
+                        <span className={`dot dot--${load.rating}`} aria-hidden="true" />
+                        <Link to={`/projects/${id}/traces/${load.transaction_id}`}>
+                          {load.name}
+                        </Link>
+                      </td>
+                      <td className="num strong">{load.lcp === null ? '—' : formatMs(load.lcp)}</td>
+                      <td className="num">{load.cls === null ? '—' : load.cls.toFixed(3)}</td>
+                      <td className="num">{load.inp === null ? '—' : formatMs(load.inp)}</td>
+                      <td className="mono">{load.release || '—'}</td>
+                      <td className="num">{relativeTime(load.timestamp)} ago</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="section">
             <h2 className="section__title">Pages worth opening</h2>
             <p className="chart2__caption">
               Ranked by p75 LCP, not by traffic — a list ordered by traffic only repeats the traffic
@@ -108,6 +149,11 @@ export function Vitals() {
   )
 }
 
+/** Whole percentages: a tenth of a percent of visitors is not a number anyone acts on. */
+function share(count: number, total: number): number {
+  return total ? Math.round((count / total) * 100) : 0
+}
+
 function VitalCard({ vital }: { vital: WebVitals['vitals'][number] }) {
   const shown =
     vital.value === null ? '—' : vital.unit === '' ? vital.value.toFixed(3) : formatMs(vital.value)
@@ -122,6 +168,32 @@ function VitalCard({ vital }: { vital: WebVitals['vitals'][number] }) {
       </div>
 
       <div className="vital__value mono">{shown}</div>
+
+      {/* The split across the bands. A p75 is one point on a distribution — two sites can
+          share it while a completely different share of visitors is having a bad time, and
+          the share is what says how many people that is. */}
+      {vital.distribution.total > 0 && (
+        <>
+          <div
+            className="bands"
+            role="img"
+            aria-label={`${share(vital.distribution.good, vital.distribution.total)}% good, ${share(vital.distribution.needs_improvement, vital.distribution.total)}% needs improvement, ${share(vital.distribution.poor, vital.distribution.total)}% poor`}
+          >
+            {(['good', 'needs_improvement', 'poor'] as const).map((band) => (
+              <span
+                key={band}
+                className={`bands__part bands__part--${band}`}
+                style={{ flex: vital.distribution[band] || 0 }}
+              />
+            ))}
+          </div>
+          <p className="vital__bands">
+            {share(vital.distribution.good, vital.distribution.total)}% good ·{' '}
+            {share(vital.distribution.poor, vital.distribution.total)}% poor ·{' '}
+            {vital.distribution.total.toLocaleString()} visits
+          </p>
+        </>
+      )}
 
       <p className="vital__explains">{vital.explains}</p>
 

@@ -284,6 +284,51 @@ export interface TagValue {
   percentage: number
 }
 
+export interface Statement {
+  description: string
+  op: string
+  count: number
+  requests: number
+  per_request: number
+  total_ms: number
+  p50: number
+  p95: number
+  slowest: number
+  table: string
+}
+
+export interface DatabaseInsights {
+  period: string
+  bucket_seconds: number
+  series_start: string
+  headline: {
+    queries: number
+    requests: number
+    per_request: number
+    total_ms: number
+    p50: number
+    p95: number
+    p99: number
+    slowest: number
+  }
+  series: { throughput: number[]; p95: number[] }
+  /** By p95 — the statement that is individually painful. */
+  slowest: Statement[]
+  /** By total time — the one that is cheap and constant. A different fix. */
+  heaviest: Statement[]
+  tables: { table: string; count: number; statements: number; total_ms: number; slowest: number }[]
+  repeated: {
+    description: string
+    op: string
+    per_request: number
+    count: number
+    requests: number
+    total_ms: number
+    wasted_ms: number
+    table: string
+  }[]
+}
+
 export interface Release {
   version: string
   requests: number
@@ -302,6 +347,8 @@ export interface Release {
 export interface WebVitals {
   period: string
   pageloads: number
+  bucket_seconds: number
+  series_start: string
   vitals: {
     key: string
     label: string
@@ -314,6 +361,11 @@ export interface WebVitals {
     poor_above: number
     /** Empty for CLS: it is a ratio, and labelling it ms would be a lie. */
     unit: string
+    /** How the visits split across the bands. A p75 is one point; the split says how many
+     *  people are actually having a bad time. */
+    distribution: { good: number; needs_improvement: number; poor: number; total: number }
+    /** p75 per bucket. null where nothing was measured — a gap, not a perfect score. */
+    trend: (number | null)[]
   }[]
   pages: {
     name: string
@@ -321,6 +373,18 @@ export interface WebVitals {
     lcp: number | null
     cls: number | null
     inp: number | null
+    rating: string
+  }[]
+  /** Individual slow page loads. An aggregate cannot be debugged. */
+  worst: {
+    transaction_id: string
+    name: string
+    lcp: number | null
+    cls: number | null
+    inp: number | null
+    timestamp: string
+    trace_id: string
+    release: string
     rating: string
   }[]
 }
@@ -480,6 +544,8 @@ export const api = {
   deleteAlertRule: (id: number) => send<null>(`/alert-rules/${id}/`, 'DELETE'),
   testAlertRule: (id: number) => send<AlertFire>(`/alert-rules/${id}/test/`, 'POST'),
   alerts: (projectId: number) => get<AlertFire[]>(`/projects/${projectId}/alerts/`),
+  database: (projectId: number, period: string) =>
+    get<DatabaseInsights>(`/projects/${projectId}/database/?period=${period}`),
   vitals: (projectId: number, period: string) =>
     get<WebVitals>(`/projects/${projectId}/vitals/?period=${period}`),
   releases: (projectId: number, period: string) =>
