@@ -1,5 +1,5 @@
 {
-  "name": "@obsly/browser",
+  "name": "obsly-browser",
   "version": "0.1.0",
   "description": "Obsly browser SDK \u2014 errors, Core Web Vitals and traces that join up with the backend",
   "license": "MIT",
@@ -42,9 +42,6 @@
   "sideEffects": false,
   "engines": {
     "node": ">=18"
-  },
-  "publishConfig": {
-    "access": "public"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
