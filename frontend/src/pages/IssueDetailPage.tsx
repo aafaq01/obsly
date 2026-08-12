@@ -156,46 +156,33 @@ export function IssueDetailPage() {
             <section>
               <h2 className="section__title">Feature flags</h2>
               <p className="chart2__caption">
-                Ranked by how much more often each was on here than across the rest of the project.
-                A flag on for everybody is not a suspect, however often it appears.
+                How much more often each was on here than across the rest of the project. A flag on
+                for everybody is not a suspect, however often it appears.
               </p>
               <div className="card">
-                <table className="table">
-                  <thead>
-                    <tr>
-                      <th>Flag</th>
-                      <th className="num">On here</th>
-                      <th className="num">Elsewhere</th>
-                      <th className="num strong">Difference</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {flags.map((row) => (
-                      <tr key={row.flag}>
-                        <td className="mono">{row.flag}</td>
-                        <td className="num">
-                          {Math.round(row.issue_rate * 100)}%
-                          <em className="chart2__ago"> of {row.issue_events}</em>
-                        </td>
-                        <td className="num">
-                          {row.baseline_rate === null
-                            ? '—'
-                            : `${Math.round(row.baseline_rate * 100)}%`}
-                        </td>
-                        {/* Null is not zero. "Nothing to compare against" is a different
-                            answer from "no difference", and rendering it as 0 would make the
-                            least-known flag look like the strongest signal. */}
-                        <td className="num strong">
-                          {row.lift === null ? (
-                            <em className="chart2__ago">no baseline yet</em>
-                          ) : (
-                            `${row.lift > 0 ? '+' : ''}${Math.round(row.lift * 100)} pts`
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                {flags.map((row) => (
+                  <div className="flagrow" key={row.flag}>
+                    <div className="flagrow__head">
+                      <span className="flagrow__name mono">{row.flag}</span>
+                      {/* Null is not zero. "Nothing to compare against" is a different answer
+                          from "no difference", and rendering it as 0 would make the
+                          least-known flag look like the strongest signal. */}
+                      {row.lift === null ? (
+                        <span className="tag tag--muted">no baseline</span>
+                      ) : (
+                        <span className={`flagrow__lift ${row.lift >= 0.2 ? 'health--bad' : ''}`}>
+                          {`${row.lift > 0 ? '+' : ''}${Math.round(row.lift * 100)} pts`}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flagrow__detail">
+                      on in <strong>{Math.round(row.issue_rate * 100)}%</strong> of{' '}
+                      {row.issue_events} here
+                      {row.baseline_rate !== null &&
+                        ` · ${Math.round(row.baseline_rate * 100)}% elsewhere`}
+                    </div>
+                  </div>
+                ))}
               </div>
             </section>
           )}

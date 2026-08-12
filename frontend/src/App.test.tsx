@@ -2489,7 +2489,9 @@ describe('Suspect feature flags', () => {
 
     expect(await screen.findByText('new-checkout')).toBeInTheDocument()
     expect(screen.getByText('+96 pts')).toBeInTheDocument()
-    expect(screen.getByText('4%')).toBeInTheDocument()
+    // The comparison reads as a sentence, so the baseline is part of the line rather than
+    // its own cell.
+    expect(screen.getByText(/4% elsewhere/)).toBeInTheDocument()
   })
 
   it('says there is no baseline rather than showing a zero', async () => {
@@ -2497,7 +2499,7 @@ describe('Suspect feature flags', () => {
     // the strongest signal, which is exactly backwards.
     mount([{ ...SUSPECT, baseline_rate: null, baseline_events: 0, lift: null }])
 
-    expect(await screen.findByText('no baseline yet')).toBeInTheDocument()
+    expect(await screen.findByText('no baseline')).toBeInTheDocument()
     expect(screen.queryByText('+0 pts')).not.toBeInTheDocument()
   })
 

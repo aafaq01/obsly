@@ -2667,3 +2667,41 @@ button.danger:hover {
   text-decoration: underline;
   text-underline-offset: 2px;
 }
+
+/* One flag per block. The aside is 300px, and the comparison — which is the whole point —
+   does not survive being a table column there. */
+.flagrow {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.flagrow:last-child {
+  border-bottom: none;
+}
+
+.flagrow__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.flagrow__name {
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.flagrow__lift {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+.flagrow__detail {
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+}
