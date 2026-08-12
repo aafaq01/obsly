@@ -284,6 +284,51 @@ export interface TagValue {
   percentage: number
 }
 
+export interface Statement {
+  description: string
+  op: string
+  count: number
+  requests: number
+  per_request: number
+  total_ms: number
+  p50: number
+  p95: number
+  slowest: number
+  table: string
+}
+
+export interface DatabaseInsights {
+  period: string
+  bucket_seconds: number
+  series_start: string
+  headline: {
+    queries: number
+    requests: number
+    per_request: number
+    total_ms: number
+    p50: number
+    p95: number
+    p99: number
+    slowest: number
+  }
+  series: { throughput: number[]; p95: number[] }
+  /** By p95 — the statement that is individually painful. */
+  slowest: Statement[]
+  /** By total time — the one that is cheap and constant. A different fix. */
+  heaviest: Statement[]
+  tables: { table: string; count: number; statements: number; total_ms: number; slowest: number }[]
+  repeated: {
+    description: string
+    op: string
+    per_request: number
+    count: number
+    requests: number
+    total_ms: number
+    wasted_ms: number
+    table: string
+  }[]
+}
+
 export interface Release {
   version: string
   requests: number
@@ -480,6 +525,8 @@ export const api = {
   deleteAlertRule: (id: number) => send<null>(`/alert-rules/${id}/`, 'DELETE'),
   testAlertRule: (id: number) => send<AlertFire>(`/alert-rules/${id}/test/`, 'POST'),
   alerts: (projectId: number) => get<AlertFire[]>(`/projects/${projectId}/alerts/`),
+  database: (projectId: number, period: string) =>
+    get<DatabaseInsights>(`/projects/${projectId}/database/?period=${period}`),
   vitals: (projectId: number, period: string) =>
     get<WebVitals>(`/projects/${projectId}/vitals/?period=${period}`),
   releases: (projectId: number, period: string) =>

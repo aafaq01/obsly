@@ -2512,6 +2512,23 @@ a.rank__row:hover .rank__name {
   color: var(--ink);
 }
 
+/* A link that does not look like one is a link nobody finds. Underlined on hover rather
+   than always, so a column of statements stays readable as text. */
+.table a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.table a:hover {
+  color: var(--series-1);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.table tr:hover .mono a {
+  color: var(--series-1);
+}
+
 .table .mono {
   font-family: var(--mono);
   font-size: 12px;
@@ -2556,4 +2573,47 @@ button.danger {
 button.danger:hover {
   background: color-mix(in srgb, var(--status-critical) 8%, transparent);
   border-color: var(--status-critical);
+}
+
+/* A heading with a control beside it. */
+.section__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+/* Two views of the same table, so a segmented control rather than a dropdown: both options
+   are worth reading, and one of them being hidden behind a click is what makes people miss
+   that the two rankings disagree. */
+.seg {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.seg__option {
+  border: none;
+  border-radius: 0;
+  background: var(--surface);
+  color: var(--ink-secondary);
+  font-size: 12px;
+  padding: 5px 11px;
+  cursor: pointer;
+}
+
+.seg__option + .seg__option {
+  border-left: 1px solid var(--border);
+}
+
+.seg__option:hover {
+  color: var(--ink);
+}
+
+.seg__option--on {
+  background: var(--grid);
+  color: var(--ink);
+  font-weight: 600;
 }

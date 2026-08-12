@@ -35,6 +35,19 @@ function mockApi(routes: Record<string, Route>) {
   return fetchMock
 }
 
+const DB_STATEMENT = {
+  description: 'SELECT 1 FROM carts',
+  op: 'db.query',
+  count: 10,
+  requests: 2,
+  per_request: 5,
+  total_ms: 100,
+  p50: 9,
+  p95: 12,
+  slowest: 14,
+  table: 'carts',
+}
+
 const PROJECT = {
   id: 1,
   name: 'Checkout',
@@ -1485,38 +1498,42 @@ describe('Rank charts', () => {
     expect(widths[1]).toBe('10%')
   })
 
-  it('links a span bar into its detail page', async () => {
+  it('links a statement into its detail page', async () => {
     mockApi({
       '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/': { body: [PROJECT] },
       '/projects/1/': { body: { ...PROJECT, keys: [] } },
-      '/projects/1/spans/': {
+      '/projects/1/database/': {
         body: {
           period: '24h',
-          ops: ['db.query'],
-          spans: [
-            {
-              op: 'db.query',
-              description: 'SELECT 1',
-              count: 10,
-              transactions: 2,
-              per_transaction: 5,
-              throughput_per_minute: 0.1,
-              total_ms: 100,
-              p50: 9,
-              p95: 12,
-            },
-          ],
+          bucket_seconds: 3600,
+          series_start: new Date().toISOString(),
+          headline: {
+            queries: 10,
+            requests: 2,
+            per_request: 5,
+            total_ms: 100,
+            p50: 9,
+            p95: 12,
+            p99: 12,
+            slowest: 14,
+          },
+          series: { throughput: [10], p95: [12] },
+          slowest: [DB_STATEMENT],
+          heaviest: [DB_STATEMENT],
+          tables: [],
+          repeated: [],
         },
       },
     })
 
     render(
-      <MemoryRouter initialEntries={['/projects/1/spans']}>
+      <MemoryRouter initialEntries={['/projects/1/insights/database']}>
         <App />
       </MemoryRouter>,
     )
 
-    await screen.findByText(/Bar length is time spent/)
+    await screen.findByRole('heading', { name: 'Database' })
     const links = screen.getAllByRole('link').map((a) => a.getAttribute('href'))
     expect(links.some((href) => href?.includes('/projects/1/span?'))).toBe(true)
   })
@@ -1554,35 +1571,39 @@ describe('Review findings', () => {
     expect(await screen.findByRole('heading', { name: 'Issues' })).toBeInTheDocument()
   })
 
-  it('ranked bars navigate in-app rather than reloading the page', async () => {
+  it('a statement navigates in-app rather than reloading the page', async () => {
     // A raw <a href> full-page-reloads an SPA. An href-only assertion passes either way, which
     // is why this asserts the navigation actually happened.
     mockApi({
       '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/': { body: [PROJECT] },
       '/projects/1/': { body: { ...PROJECT, keys: [] } },
-      '/projects/1/spans/': {
+      '/projects/1/database/': {
         body: {
           period: '24h',
-          ops: ['db.query'],
-          spans: [
-            {
-              op: 'db.query',
-              description: 'SELECT 1',
-              count: 10,
-              transactions: 2,
-              per_transaction: 5,
-              throughput_per_minute: 0.1,
-              total_ms: 100,
-              p50: 9,
-              p95: 12,
-            },
-          ],
+          bucket_seconds: 3600,
+          series_start: new Date().toISOString(),
+          headline: {
+            queries: 10,
+            requests: 2,
+            per_request: 5,
+            total_ms: 100,
+            p50: 9,
+            p95: 12,
+            p99: 12,
+            slowest: 14,
+          },
+          series: { throughput: [10], p95: [12] },
+          slowest: [DB_STATEMENT],
+          heaviest: [DB_STATEMENT],
+          tables: [],
+          repeated: [],
         },
       },
       '/projects/1/span/': {
         body: {
           op: 'db.query',
-          description: 'SELECT 1',
+          description: 'SELECT 1 FROM carts',
           period: '24h',
           summary: {
             count: 10,
@@ -1602,13 +1623,13 @@ describe('Review findings', () => {
     })
 
     render(
-      <MemoryRouter initialEntries={['/projects/1/spans']}>
+      <MemoryRouter initialEntries={['/projects/1/insights/database']}>
         <App />
       </MemoryRouter>,
     )
 
-    const chart = await screen.findByRole('figure')
-    await userEvent.click(within(chart).getByRole('link'))
+    await screen.findByRole('heading', { name: 'Database' })
+    await userEvent.click(screen.getAllByRole('link', { name: 'SELECT 1 FROM carts' })[0]!)
 
     expect(await screen.findByText('How long these calls take')).toBeInTheDocument()
   })
@@ -2093,25 +2114,100 @@ describe('Insights layers', () => {
     )
   }
 
-  it('the Database page shows only database spans', async () => {
-    // A nav item called Database that lists http.client makes the whole grouping a lie.
-    mount('/projects/1/insights/database')
+  it('the Database page ranks by p95 and by total time separately', async () => {
+    // The slowest query and the most expensive query are usually different statements with
+    // different fixes, and one ranking called "top queries" sends people to the wrong one.
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/': { body: [PROJECT] },
+      '/projects/1/': { body: { ...PROJECT, keys: [] } },
+      '/projects/1/database/': {
+        body: {
+          period: '24h',
+          bucket_seconds: 3600,
+          series_start: new Date().toISOString(),
+          headline: {
+            queries: 70,
+            requests: 61,
+            per_request: 1.1,
+            total_ms: 2100,
+            p50: 20,
+            p95: 800,
+            p99: 900,
+            slowest: 900,
+          },
+          series: { throughput: [70], p95: [800] },
+          slowest: [{ ...DB_STATEMENT, description: 'SELECT * FROM analytics_rollup', p95: 900 }],
+          heaviest: [{ ...DB_STATEMENT, description: 'SELECT * FROM carts', total_ms: 1200 }],
+          tables: [],
+          repeated: [],
+        },
+      },
+    })
 
-    expect(await screen.findByRole('heading', { name: 'Database' })).toBeInTheDocument()
-    // Twice over: the ranked chart and the table below it both list it.
-    expect(screen.getAllByText('SELECT * FROM carts WHERE id = %s').length).toBeGreaterThan(0)
-    expect(screen.queryAllByText('POST payments.example.com/charge')).toHaveLength(0)
-    expect(screen.queryAllByText('search:results')).toHaveLength(0)
+    render(
+      <MemoryRouter initialEntries={['/projects/1/insights/database']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('SELECT * FROM analytics_rollup')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'By total time' }))
+    expect(screen.getByText('SELECT * FROM carts')).toBeInTheDocument()
   })
 
-  it('the Database operation filter offers only database operations', async () => {
-    // A filter listing ops the page will never show is a control that does nothing.
-    mount('/projects/1/insights/database')
+  it('surfaces a query called once per row, which neither ranking would show', async () => {
+    // Each call is fast, which is exactly why the pattern survives review.
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/': { body: [PROJECT] },
+      '/projects/1/': { body: { ...PROJECT, keys: [] } },
+      '/projects/1/database/': {
+        body: {
+          period: '24h',
+          bucket_seconds: 3600,
+          series_start: new Date().toISOString(),
+          headline: {
+            queries: 25,
+            requests: 1,
+            per_request: 25,
+            total_ms: 50,
+            p50: 2,
+            p95: 2,
+            p99: 2,
+            slowest: 3,
+          },
+          series: { throughput: [25], p95: [2] },
+          slowest: [DB_STATEMENT],
+          heaviest: [DB_STATEMENT],
+          tables: [],
+          repeated: [
+            {
+              description: 'SELECT total FROM orders WHERE id = %s',
+              op: 'db.query',
+              per_request: 25,
+              count: 25,
+              requests: 1,
+              total_ms: 50,
+              wasted_ms: 48,
+              table: 'orders',
+            },
+          ],
+        },
+      },
+    })
 
-    await screen.findByRole('heading', { name: 'Database' })
-    const options = [...document.querySelectorAll('option')].map((o) => o.textContent)
-    expect(options).toContain('db.query')
-    expect(options).not.toContain('http.client')
+    render(
+      <MemoryRouter initialEntries={['/projects/1/insights/database']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('Called once per row')).toBeInTheDocument()
+    expect(screen.getByText('SELECT total FROM orders WHERE id = %s')).toBeInTheDocument()
+    // What collapsing the loop would give back, not the whole total.
+    expect(screen.getByText('48ms')).toBeInTheDocument()
   })
 
   it('the Cache page shows only cache spans', async () => {

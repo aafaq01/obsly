@@ -6,6 +6,7 @@ import { Notice } from './components/Notice'
 import { AppShell } from './components/AppShell'
 import { Alerts } from './pages/Alerts'
 import { Dashboard } from './pages/Dashboard'
+import { Database } from './pages/Database'
 import { EndpointDetail } from './pages/EndpointDetail'
 import { IssueDetailPage } from './pages/IssueDetailPage'
 import { Issues } from './pages/Issues'
@@ -14,7 +15,6 @@ import { Logs } from './pages/Logs'
 import { Performance } from './pages/Performance'
 import { ProjectSettings } from './pages/ProjectSettings'
 import { Projects } from './pages/Projects'
-import { Queries } from './pages/Queries'
 import { SpanDetail } from './pages/SpanDetail'
 import { TraceDetail } from './pages/TraceDetail'
 import { Releases } from './pages/Releases'
@@ -77,7 +77,7 @@ export function App() {
                 {/* One page per tier of the stack. */}
                 <Route path="insights/frontend" element={<Vitals />} />
                 <Route path="insights/backend" element={<Performance />} />
-                <Route path="insights/database" element={<Queries layer="db." />} />
+                <Route path="insights/database" element={<Database />} />
                 <Route path="insights/cache" element={<Cache />} />
 
                 <Route path="releases" element={<Releases />} />

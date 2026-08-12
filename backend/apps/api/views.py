@@ -22,6 +22,7 @@ from rest_framework.views import APIView
 from apps.alerts.delivery import send_now
 from apps.alerts.models import AlertFire, AlertRule
 from apps.api.dashboard import overview
+from apps.api.database import summary as database_summary
 from apps.api.performance import (
     endpoint_detail,
     endpoint_summary,
@@ -637,3 +638,11 @@ class ReleasesView(APIView):
 
     def get(self, request: Request, project_id: int) -> Response:
         return Response(releases_summary(project_id, request.query_params.get("period", "24h")))
+
+
+class DatabaseInsightsView(APIView):
+    """The database tier: what is slow, what is expensive, and what runs once per row."""
+
+    def get(self, request: Request, project_id: int) -> Response:
+        get_object_or_404(Project, pk=project_id)
+        return Response(database_summary(project_id, request.query_params.get("period", "24h")))
