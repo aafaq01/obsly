@@ -41,6 +41,7 @@ def _upsert(event: Event, fingerprint: str, components: list[str]) -> Issue:
             "culprit": event.culprit,
             "level": event.level,
             "platform": event.platform,
+            "first_release": event.release,
             "times_seen": 1,
             "first_seen": event.timestamp,
             "last_seen": event.timestamp,
@@ -109,6 +110,7 @@ def _upsert_performance_issue(txn: Transaction, finding: "detectors.Finding") ->
             # how an issue stream stops being a priority list.
             "level": "warning",
             "platform": "",
+            "first_release": txn.release,
             "evidence": finding.evidence,
             "times_seen": 1,
             "first_seen": txn.timestamp,

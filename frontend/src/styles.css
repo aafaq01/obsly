@@ -2038,3 +2038,15 @@ a.rank__row:hover .rank__name {
 .dot--poor {
   background: var(--status-critical);
 }
+
+/* Release health: bands, not a gradient. A deploy is fine, worth watching, or worth
+   reverting — and a continuous colour scale makes all three look like the same decision. */
+.health--good {
+  color: var(--status-good);
+}
+.health--warn {
+  color: var(--status-warning);
+}
+.health--bad {
+  color: var(--status-critical);
+}

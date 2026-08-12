@@ -62,6 +62,13 @@ class Issue(TimestampedModel):
     level = models.CharField(max_length=16, choices=Level, default=Level.ERROR, db_index=True)
     platform = models.CharField(max_length=32, blank=True)
 
+    # The release this issue was first seen in, captured once at creation.
+    #
+    # Derivable from the issue's earliest event, but only by a sort over every event in the
+    # group — and the question "what did this release break?" is asked of the whole issue
+    # table at once, which is exactly the scan a stored column exists to avoid.
+    first_release = models.CharField(max_length=128, blank=True, db_index=True)
+
     status = models.CharField(
         max_length=16, choices=IssueStatus, default=IssueStatus.UNRESOLVED, db_index=True
     )
