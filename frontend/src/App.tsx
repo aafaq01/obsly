@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Link, Navigate, Route, Routes } from 'react-router-dom'
+import { Navigate, Route, Routes } from 'react-router-dom'
 
 import { api } from './api'
 import { Notice } from './components/Notice'
-import { ProjectLayout } from './components/ProjectLayout'
+import { AppShell } from './components/AppShell'
 import { Alerts } from './pages/Alerts'
 import { Dashboard } from './pages/Dashboard'
 import { EndpointDetail } from './pages/EndpointDetail'
@@ -20,6 +20,7 @@ import { TraceDetail } from './pages/TraceDetail'
 import { Releases } from './pages/Releases'
 import { Traces } from './pages/Traces'
 import { Vitals } from './pages/Vitals'
+import { Cache } from './pages/Cache'
 
 type Auth = { state: 'loading' } | { state: 'in'; username: string } | { state: 'out' }
 
@@ -41,30 +42,7 @@ export function App() {
 
   return (
     <div className="app">
-      <header className="topbar">
-        <Link to="/projects" className="topbar__brand">
-          Obsly
-        </Link>
-        {auth.state === 'in' && (
-          <nav className="topbar__nav">
-            <Link to="/projects">Projects</Link>
-          </nav>
-        )}
-        <div className="topbar__spacer" />
-        {auth.state === 'in' && (
-          <>
-            <span className="topbar__user">{auth.username}</span>
-            <button
-              className="button"
-              onClick={() => void api.logout().then(() => setAuth({ state: 'out' }))}
-            >
-              Sign out
-            </button>
-          </>
-        )}
-      </header>
-
-      <main className="content">
+      <main className="app__body">
         {auth.state === 'loading' && <Notice>Checking session…</Notice>}
 
         {auth.state === 'out' && (
@@ -73,39 +51,58 @@ export function App() {
 
         {auth.state === 'in' && (
           <Routes>
-            {/* The project list, not a project. Landing on whichever project sorts first is
-                arbitrary, and it reads as a bug the moment you have more than one. */}
-            <Route path="/" element={<Navigate to="/projects" replace />} />
-            <Route path="/projects" element={<Projects />} />
+            <Route
+              element={
+                <AppShell
+                  username={auth.username}
+                  onSignOut={() => void api.logout().then(() => setAuth({ state: 'out' }))}
+                />
+              }
+            >
+              {/* The project list, not a project. Landing on whichever project sorts first is
+                  arbitrary, and it reads as a bug the moment you have more than one. */}
+              <Route path="/" element={<Navigate to="/projects" replace />} />
+              <Route path="/projects" element={<Projects />} />
 
-            {/* A layout route, so the tab bar sits inside a matched route and can read
-                :projectId. Every project page renders under it and inherits the tabs. */}
-            <Route path="/projects/:projectId" element={<ProjectLayout />}>
-              <Route index element={<Navigate to="dashboard" replace />} />
-              <Route path="dashboard" element={<Dashboard />} />
-              <Route path="issues" element={<Issues />} />
-              <Route path="performance" element={<Performance />} />
-              <Route path="traces" element={<Traces />} />
-              <Route path="spans" element={<Queries />} />
-              <Route path="span" element={<SpanDetail />} />
-              <Route path="endpoint" element={<EndpointDetail />} />
-              <Route path="logs" element={<Logs />} />
-              <Route path="alerts" element={<Alerts />} />
-              <Route path="vitals" element={<Vitals />} />
-              <Route path="releases" element={<Releases />} />
-              <Route path="settings" element={<ProjectSettings />} />
+              <Route path="/projects/:projectId">
+                {/* Issues first, the way Sentry lands: the question you open an observability
+                    tool to ask is "what is broken", not "what are the averages". */}
+                <Route index element={<Navigate to="issues" replace />} />
+                <Route path="issues" element={<Issues />} />
+                <Route path="dashboard" element={<Dashboard />} />
 
-              {/* Detail pages live under the layout too, so opening an issue does not drop you
-                  out of the project you were in and strand you with no way back except the
-                  browser button. */}
-              <Route path="issues/:issueId" element={<IssueDetailPage />} />
-              <Route path="traces/:traceId" element={<TraceDetail />} />
+                <Route path="traces" element={<Traces />} />
+                <Route path="logs" element={<Logs />} />
+
+                {/* One page per tier of the stack. */}
+                <Route path="insights/frontend" element={<Vitals />} />
+                <Route path="insights/backend" element={<Performance />} />
+                <Route path="insights/database" element={<Queries layer="db." />} />
+                <Route path="insights/cache" element={<Cache />} />
+
+                <Route path="releases" element={<Releases />} />
+                <Route path="alerts" element={<Alerts />} />
+                <Route path="settings" element={<ProjectSettings />} />
+
+                {/* Detail pages live under the shell too, so opening an issue does not drop you
+                    out of the project you were in. */}
+                <Route path="span" element={<SpanDetail />} />
+                <Route path="endpoint" element={<EndpointDetail />} />
+                <Route path="issues/:issueId" element={<IssueDetailPage />} />
+                <Route path="traces/:traceId" element={<TraceDetail />} />
+
+                {/* The tab names before Insights existed. A bookmark or a link in an old
+                    incident channel must still land where it meant to. */}
+                <Route path="vitals" element={<Navigate to="../insights/frontend" replace />} />
+                <Route path="performance" element={<Navigate to="../insights/backend" replace />} />
+                <Route path="spans" element={<Navigate to="../insights/database" replace />} />
+              </Route>
+
+              {/* The old flat links, kept so a pasted or bookmarked URL still resolves. */}
+              <Route path="/issues/:issueId" element={<IssueDetailPage />} />
+              <Route path="/traces/:traceId" element={<TraceDetail />} />
+              <Route path="*" element={<Navigate to="/projects" replace />} />
             </Route>
-
-            {/* The old flat links, kept so a pasted or bookmarked URL still resolves. */}
-            <Route path="/issues/:issueId" element={<IssueDetailPage />} />
-            <Route path="/traces/:traceId" element={<TraceDetail />} />
-            <Route path="*" element={<Navigate to="/projects" replace />} />
           </Routes>
         )}
       </main>

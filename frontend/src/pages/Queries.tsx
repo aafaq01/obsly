@@ -3,7 +3,6 @@ import { Link, useParams, useSearchParams } from 'react-router-dom'
 
 import { api, type SpanInsights } from '../api'
 import { Notice, Skeleton } from '../components/Notice'
-import { PeriodPicker } from '../components/PeriodPicker'
 import { RankChart } from '../components/RankChart'
 import { handle } from '../errors'
 import { formatMs } from '../format'
@@ -30,7 +29,7 @@ const SORT_FORMAT: Record<SortKey, (value: number) => string> = {
  * A waterfall shows one request. The span that matters is usually the one that is individually
  * fast and runs ten thousand times, and only an aggregate can surface that.
  */
-export function Queries() {
+export function Queries({ layer = '' }: { layer?: string } = {}) {
   const { projectId } = useParams()
   const [params, setParams] = useSearchParams()
   const [data, setData] = useState<SpanInsights | null>(null)
@@ -57,7 +56,10 @@ export function Queries() {
   if (error) return <Notice>{error}</Notice>
   if (!data) return <Skeleton rows={6} />
 
-  const rows = [...data.spans].sort((a, b) => b[sort] - a[sort])
+  // A page called Database must not list http.client spans. The nav promises one tier of
+  // the stack, and a page that quietly shows all of them makes the whole grouping a lie.
+  const scoped = layer ? data.spans.filter((span) => span.op.startsWith(layer)) : data.spans
+  const rows = [...scoped].sort((a, b) => b[sort] - a[sort])
 
   function update(key: string, value: string) {
     const next = new URLSearchParams(params)
@@ -68,22 +70,24 @@ export function Queries() {
 
   return (
     <>
-      <h1 className="page-title">Spans</h1>
+      <h1 className="page-title">{layer === 'db.' ? 'Database' : 'Spans'}</h1>
       <p className="page-subtitle">
-        Every span, grouped by what it does. The one worth fixing is usually not the slowest — it is
-        the one that is fast and runs constantly.
+        {layer === 'db.'
+          ? 'Every query, grouped by statement. The one worth fixing is usually not the slowest — it is the one that is fast and runs on every request.'
+          : 'Every span, grouped by what it does. The one worth fixing is usually not the slowest — it is the one that is fast and runs constantly.'}
       </p>
 
       <div className="filters">
         <select value={op} onChange={(e) => update('op', e.target.value)} aria-label="Operation">
           <option value="">All operations</option>
-          {data.ops.map((option) => (
-            <option key={option} value={option}>
-              {option}
-            </option>
-          ))}
+          {data.ops
+            .filter((option) => !layer || option.startsWith(layer))
+            .map((option) => (
+              <option key={option} value={option}>
+                {option}
+              </option>
+            ))}
         </select>
-        <PeriodPicker value={period} onChange={(next) => update('period', next)} />
         <select
           value={sort}
           onChange={(e) => setSort(e.target.value as SortKey)}

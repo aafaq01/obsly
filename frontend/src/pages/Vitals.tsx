@@ -3,7 +3,6 @@ import { useParams, useSearchParams } from 'react-router-dom'
 
 import { api, type WebVitals } from '../api'
 import { Notice, Skeleton } from '../components/Notice'
-import { PeriodPicker } from '../components/PeriodPicker'
 import { handle } from '../errors'
 import { formatMs } from '../format'
 import { periodLabel } from '../periods'
@@ -22,7 +21,7 @@ export function Vitals() {
   const { projectId } = useParams()
   const id = Number(projectId)
 
-  const [params, setParams] = useSearchParams()
+  const [params] = useSearchParams()
   const period = params.get('period') ?? '24h'
   const [data, setData] = useState<WebVitals | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -47,14 +46,6 @@ export function Vitals() {
     <>
       <div className="page-head">
         <h1>Web Vitals</h1>
-        <PeriodPicker
-          value={period}
-          onChange={(next) => {
-            const updated = new URLSearchParams(params)
-            updated.set('period', next)
-            setParams(updated)
-          }}
-        />
       </div>
 
       <p className="page-head__sub">

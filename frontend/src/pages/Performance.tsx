@@ -4,7 +4,6 @@ import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { api, type Performance as PerformanceData } from '../api'
 import { EventChart } from '../components/EventChart'
 import { Notice, Skeleton } from '../components/Notice'
-import { PeriodPicker } from '../components/PeriodPicker'
 import { RankChart } from '../components/RankChart'
 import { handle } from '../errors'
 import { periodLabel } from '../periods'
@@ -32,7 +31,7 @@ export function Performance() {
   const [error, setError] = useState<string | null>(null)
   // In the URL, not in state: a breadcrumb back from a detail page has to restore the
   // window you were looking at, and state cannot survive that trip.
-  const [params, setParams] = useSearchParams()
+  const [params] = useSearchParams()
   const period = params.get('period') ?? '24h'
   const [sort, setSort] = useState<SortKey>('total_ms')
 
@@ -69,14 +68,6 @@ export function Performance() {
       </p>
 
       <div className="filters">
-        <PeriodPicker
-          value={period}
-          onChange={(next) => {
-            const updated = new URLSearchParams(params)
-            updated.set('period', next)
-            setParams(updated)
-          }}
-        />
         <select
           value={sort}
           onChange={(e) => setSort(e.target.value as SortKey)}

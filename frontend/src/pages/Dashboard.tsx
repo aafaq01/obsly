@@ -3,7 +3,6 @@ import { Link, useParams, useSearchParams } from 'react-router-dom'
 
 import { api, type Dashboard as Data } from '../api'
 import { Notice, Skeleton } from '../components/Notice'
-import { PeriodPicker } from '../components/PeriodPicker'
 import { Sparkline } from '../components/Sparkline'
 import { handle } from '../errors'
 import { bucketLabel, formatMs } from '../format'
@@ -11,7 +10,7 @@ import { relativeTime } from '../time'
 
 export function Dashboard() {
   const { projectId } = useParams()
-  const [params, setParams] = useSearchParams()
+  const [params] = useSearchParams()
   const [data, setData] = useState<Data | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -44,16 +43,6 @@ export function Dashboard() {
 
       {/* One filter row above everything it scopes, so every chart re-renders against the
           same slice. Per-chart period pickers make two charts disagree silently. */}
-      <div className="filters">
-        <PeriodPicker
-          value={period}
-          onChange={(next) => {
-            const params2 = new URLSearchParams(params)
-            params2.set('period', next)
-            setParams(params2)
-          }}
-        />
-      </div>
 
       {empty && (
         <Notice>

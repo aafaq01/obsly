@@ -3,7 +3,6 @@ import { useParams, useSearchParams } from 'react-router-dom'
 
 import { api, type Release } from '../api'
 import { Notice, Skeleton } from '../components/Notice'
-import { PeriodPicker } from '../components/PeriodPicker'
 import { handle } from '../errors'
 import { formatMs } from '../format'
 import { periodLabel } from '../periods'
@@ -24,7 +23,7 @@ export function Releases() {
   const { projectId } = useParams()
   const id = Number(projectId)
 
-  const [params, setParams] = useSearchParams()
+  const [params] = useSearchParams()
   const period = params.get('period') ?? '24h'
   const [releases, setReleases] = useState<Release[] | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -49,14 +48,6 @@ export function Releases() {
     <>
       <div className="page-head">
         <h1>Releases</h1>
-        <PeriodPicker
-          value={period}
-          onChange={(next) => {
-            const updated = new URLSearchParams(params)
-            updated.set('period', next)
-            setParams(updated)
-          }}
-        />
       </div>
 
       {releases.length === 0 ? (
@@ -101,12 +92,18 @@ export function Releases() {
                     <td className="num">{release.errors.toLocaleString()}</td>
                     <td className="num">
                       {release.issues_introduced > 0 ? (
-                        <strong>{release.issues_introduced}</strong>
+                        <>
+                          <strong>{release.issues_introduced}</strong>
+                          {/* Parenthesised, or "8" and "8 open" run together and read as 88. */}
+                          {release.issues_unresolved > 0 && (
+                            <em className="chart2__ago">
+                              {' '}
+                              ({release.issues_unresolved} still open)
+                            </em>
+                          )}
+                        </>
                       ) : (
                         '—'
-                      )}
-                      {release.issues_unresolved > 0 && (
-                        <em className="chart2__ago"> {release.issues_unresolved} open</em>
                       )}
                     </td>
                     <td className="num">{relativeTime(release.last_seen)} ago</td>
