@@ -161,6 +161,16 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: The built package actually loads
+        run: |
+          # The package ships raw ESM. Extensionless imports typecheck and build cleanly and
+          # then fail in every browser and in Node, because only a bundler resolves them —
+          # which is exactly the environment this is least likely to be tested in.
+          node --input-type=module -e "import('./dist/index.js').then(m => {
+            if (typeof m.init !== 'function') { throw new Error('init is missing from the built package') }
+            console.log('exports:', Object.keys(m).sort().join(', '))
+          })"
+
       - name: No runtime dependencies
         run: |
           # Same promise as the Python SDK: adding this to a page must not be able to break it

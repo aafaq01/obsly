@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Obsly demo shop</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+        --line: rgba(128, 128, 128, 0.3);
+      }
+      body {
+        font:
+          15px/1.6 system-ui,
+          sans-serif;
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 32px 20px 80px;
+      }
+      h1 {
+        margin-bottom: 4px;
+      }
+      p.sub {
+        margin-top: 0;
+        opacity: 0.7;
+      }
+      section {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 16px;
+        margin: 16px 0;
+      }
+      h2 {
+        font-size: 15px;
+        margin: 0 0 4px;
+      }
+      .why {
+        font-size: 13px;
+        opacity: 0.7;
+        margin: 0 0 12px;
+      }
+      button {
+        font: inherit;
+        padding: 6px 12px;
+        margin: 0 6px 6px 0;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: transparent;
+        cursor: pointer;
+      }
+      button:hover {
+        border-color: currentColor;
+      }
+      #log {
+        font-family: ui-monospace, monospace;
+        font-size: 12px;
+        white-space: pre-wrap;
+        max-height: 220px;
+        overflow: auto;
+      }
+      /* A deliberately late-loading hero. It arrives after first paint and pushes everything
+         below it down, which is what a bad LCP and a bad CLS look like in real life. */
+      #hero {
+        background: linear-gradient(135deg, #6a5acd, #20b2aa);
+        border-radius: 8px;
+        height: 0;
+        transition: height 0.2s;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="hero"></div>
+
+    <h1>Obsly demo shop</h1>
+    <p class="sub">
+      A deliberately imperfect page. Everything it does is reported to Obsly by
+      <code>@obsly/browser</code>, and every request it makes continues into the FastAPI backend
+      as the same trace.
+    </p>
+
+    <section>
+      <h2>Traced requests</h2>
+      <p class="why">
+        Same-origin, so each one carries an <code>obsly-trace</code> header. Open the resulting
+        trace in Obsly and the browser span and the server span are in one waterfall.
+      </p>
+      <button data-fetch="/">GET /</button>
+      <button data-fetch="/checkout/c-1">GET /checkout/c-1 (succeeds)</button>
+      <button data-fetch="/checkout/c-missing">GET /checkout/c-missing (500s)</button>
+      <button data-fetch="/report">GET /report (N+1 inside)</button>
+      <button data-fetch="/slow">GET /slow</button>
+    </section>
+
+    <section>
+      <h2>Browser errors</h2>
+      <p class="why">
+        Three ways an error reaches Obsly from a page: uncaught, an unhandled rejection, and one
+        the application catches and reports itself.
+      </p>
+      <button id="throw">Throw uncaught TypeError</button>
+      <button id="reject">Unhandled promise rejection</button>
+      <button id="capture">Caught and reported with context</button>
+    </section>
+
+    <section>
+      <h2>Web vitals</h2>
+      <p class="why">
+        The hero above loads late on purpose. Shifting it moves the page under the reader, which
+        is exactly what CLS measures.
+      </p>
+      <button id="shift">Shift the layout</button>
+      <button id="block">Block the main thread for 400ms</button>
+    </section>
+
+    <section>
+      <h2>What happened</h2>
+      <div id="log">ready</div>
+    </section>
+
+    <script type="module">
+      import { init, captureException } from './sdk/index.js'
+
+      const say = (message) => {
+        const log = document.getElementById('log')
+        log.textContent = `${new Date().toLocaleTimeString()}  ${message}\n${log.textContent}`
+      }
+
+      // Injected by the demo server, so nobody has to edit this file. `currentScript` is
+      // null inside a module, which is why this is not read from a data attribute.
+      const dsn = window.__OBSLY_DSN__
+      if (!dsn) {
+        say('No DSN configured — set OBSLY_DSN before starting the demo server.')
+      } else {
+        init({
+          dsn,
+          environment: 'production',
+          release: 'obsly-demo-shop@1.0.0',
+          tracesSampleRate: 1,
+        })
+        say('SDK initialised. Vitals report when you leave or hide this tab.')
+      }
+
+      for (const button of document.querySelectorAll('[data-fetch]')) {
+        button.addEventListener('click', async () => {
+          const path = button.dataset.fetch
+          try {
+            const response = await fetch(path)
+            say(`${path} → ${response.status}`)
+          } catch (error) {
+            say(`${path} → ${error.message}`)
+          }
+        })
+      }
+
+      document.getElementById('throw').addEventListener('click', () => {
+        // Genuinely uncaught: this is what window.onerror is for.
+        null.checkout()
+      })
+
+      document.getElementById('reject').addEventListener('click', () => {
+        Promise.reject(new Error('payment provider did not answer'))
+        say('rejected a promise with no catch')
+      })
+
+      document.getElementById('capture').addEventListener('click', () => {
+        try {
+          throw new RangeError('cart quantity out of range')
+        } catch (error) {
+          captureException(error, { cartId: 'c-1', quantity: 9999, step: 'quantity-check' })
+          say('reported a caught error with cartId and step as tags')
+        }
+      })
+
+      document.getElementById('shift').addEventListener('click', () => {
+        const hero = document.getElementById('hero')
+        hero.style.height = hero.style.height === '160px' ? '0' : '160px'
+        say('moved the page under the reader — that is CLS')
+      })
+
+      document.getElementById('block').addEventListener('click', () => {
+        const until = performance.now() + 400
+        while (performance.now() < until) {
+          /* deliberately blocking, which is what INP measures */
+        }
+        say('blocked the main thread for 400ms — that is INP')
+      })
+
+      // The hero arrives late on purpose, so LCP is a number worth looking at.
+      setTimeout(() => {
+        document.getElementById('hero').style.height = '160px'
+      }, 900)
+    </script>
+  </body>
+</html>

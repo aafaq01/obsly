@@ -1,4 +1,4 @@
-import type { Dsn } from './dsn'
+import type { Dsn } from './dsn.js'
 
 export type Item = { type: 'event' | 'transaction' | 'log'; payload: unknown }
 

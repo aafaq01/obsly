@@ -12,12 +12,17 @@ grouping, correlation and percentile behaviour can be seen rather than described
 Every endpoint here is a deliberate failure. Nothing in this file is an example of good code.
 """
 
+import json
 import logging
+import os
+import pathlib
 import random
 import time
 
 import obsly
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
 from obsly.integrations.fastapi import ObslyMiddleware
 
 obsly.init(
@@ -38,6 +43,35 @@ app = FastAPI(title="Obsly demo")
 app.add_middleware(ObslyMiddleware)
 
 CART: dict[str, list[dict[str, float]]] = {"c-1": [{"price": 9.99}]}
+
+HERE = pathlib.Path(__file__).parent
+SDK_DIST = HERE.parent.parent / "sdk" / "browser" / "dist"
+
+# The browser half of the demo. Mounted only when the SDK has been built, so a missing `npm
+# run build` is a page that says what to do rather than a stack trace on startup.
+if SDK_DIST.is_dir():
+    app.mount("/sdk", StaticFiles(directory=SDK_DIST), name="sdk")
+
+
+@app.get("/shop", response_class=HTMLResponse)
+def shop() -> str:
+    """A page that reports itself to Obsly.
+
+    Served from the same origin as the API it calls, which is what lets the browser SDK attach
+    a trace header without turning every request into a preflighted one.
+    """
+    if not SDK_DIST.is_dir():
+        return (
+            "<h1>Build the browser SDK first</h1>"
+            "<pre>cd sdk/browser &amp;&amp; npm install &amp;&amp; npm run build</pre>"
+        )
+
+    dsn = os.environ.get("OBSLY_DSN", "")
+    page = (HERE / "shop.html").read_text(encoding="utf-8")
+    # json.dumps rather than an f-string: a DSN containing a quote would otherwise close the
+    # script tag early, and the public key is designed to ship in a page anyway.
+    injected = f"<script>window.__OBSLY_DSN__ = {json.dumps(dsn)};</script>"
+    return page.replace('<script type="module">', f'{injected}\n<script type="module">', 1)
 
 
 @app.get("/")

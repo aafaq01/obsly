@@ -1,8 +1,8 @@
-import { parseDsn, type Dsn } from './dsn'
-import { parseStack } from './stacktrace'
-import { hex, instrumentFetch, type Span } from './tracing'
-import { buildEnvelope, send, type Item } from './transport'
-import { collectVitals, type Measurements } from './vitals'
+import { parseDsn, type Dsn } from './dsn.js'
+import { parseStack } from './stacktrace.js'
+import { hex, instrumentFetch, type Span } from './tracing.js'
+import { buildEnvelope, send, type Item } from './transport.js'
+import { collectVitals, type Measurements } from './vitals.js'
 
 export interface Options {
   dsn: string
@@ -240,6 +240,6 @@ function stringTags(context: Record<string, unknown>): Record<string, string> {
   return tags
 }
 
-export { parseDsn } from './dsn'
-export { parseStack } from './stacktrace'
-export { TRACE_HEADER } from './tracing'
+export { parseDsn } from './dsn.js'
+export { parseStack } from './stacktrace.js'
+export { TRACE_HEADER } from './tracing.js'
