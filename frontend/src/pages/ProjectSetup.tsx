@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useParams, useSearchParams } from 'react-router-dom'
 
 import { api, type ProjectDetail } from '../api'
 import { Notice, Skeleton } from '../components/Notice'
@@ -40,7 +40,8 @@ export function ProjectSetup() {
 
   const [project, setProject] = useState<ProjectDetail | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [tier, setTier] = useState<Tier>('backend')
+  const [params, setParams] = useSearchParams()
+  const tier: Tier = params.get('tier') === 'frontend' ? 'frontend' : 'backend'
   const [copied, setCopied] = useState<string | null>(null)
 
   const waiting = (project?.platforms ?? []).length === 0
@@ -133,7 +134,7 @@ export function ProjectSetup() {
                     key={option.key}
                     className={tier === option.key ? 'seg__option seg__option--on' : 'seg__option'}
                     aria-pressed={tier === option.key}
-                    onClick={() => setTier(option.key)}
+                    onClick={() => setParams({ tier: option.key }, { replace: true })}
                   >
                     {option.label}
                   </button>

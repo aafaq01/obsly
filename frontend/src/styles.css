@@ -2922,3 +2922,55 @@ button.danger:hover {
     opacity: 0.8;
   }
 }
+
+/* An empty layer page is not an error and not really empty — it is a tier nobody has
+   instrumented, so the state carries the action rather than only naming the absence. */
+.setup-prompt {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 22px 24px;
+}
+
+.setup-prompt__title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.setup-prompt__note {
+  margin: 6px 0 16px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ink-secondary);
+  max-width: 64ch;
+}
+
+.setup-prompt__note code {
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+/* The explanation and the control it belongs to, side by side until the room runs out. */
+.settings-cta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.settings-cta__note {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--ink-secondary);
+  max-width: 58ch;
+}
+
+/* A link that acts as a button has to sit on the text baseline like one. */
+a.button {
+  display: inline-block;
+  text-decoration: none;
+}

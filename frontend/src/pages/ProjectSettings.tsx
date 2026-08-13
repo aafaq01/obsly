@@ -51,11 +51,15 @@ export function ProjectSettings() {
         <h2 className="section__title">Getting started</h2>
         <div className="card card--tight">
           {live ? (
-            <p style={{ margin: 0 }}>
-              <Link to={`/projects/${project.id}/setup`}>Setup instructions →</Link> — install
-              snippets for the backend and the browser, with this project&rsquo;s DSN already in
-              them.
-            </p>
+            <div className="settings-cta">
+              <p className="settings-cta__note">
+                Install snippets for the backend and the browser, with this project&rsquo;s DSN
+                already in them.
+              </p>
+              <Link className="button button--primary" to={`/projects/${project.id}/setup`}>
+                Open setup
+              </Link>
+            </div>
           ) : (
             <Notice>
               <strong>No active key</strong>

@@ -3,6 +3,7 @@ import { Link, useParams, useSearchParams } from 'react-router-dom'
 
 import { api, type WebVitals } from '../api'
 import { Notice, Skeleton } from '../components/Notice'
+import { SetupPrompt } from '../components/SetupPrompt'
 import { handle } from '../errors'
 import { formatMs } from '../format'
 import { periodLabel } from '../periods'
@@ -55,12 +56,10 @@ export function Vitals() {
       </p>
 
       {data.pageloads === 0 ? (
-        <div className="card card--tight">
-          <p className="logs__empty">
-            No page loads reported yet. These come from the browser SDK — add{' '}
-            <code>obsly-browser</code> to the frontend and they will appear here.
-          </p>
-        </div>
+        <SetupPrompt tier="frontend">
+          Core Web Vitals are measured by the browser itself, so they arrive with the browser SDK
+          rather than from the server.
+        </SetupPrompt>
       ) : (
         <>
           <div className="vitals">
