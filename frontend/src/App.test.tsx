@@ -117,7 +117,7 @@ const PROJECT = {
   id: 1,
   name: 'Checkout',
   slug: 'checkout',
-  platform: 'python',
+  platforms: ['python'],
   organization: 'Acme',
   unresolved_count: 2,
 }
@@ -164,6 +164,7 @@ describe('App authentication', () => {
       '/me/': { body: { authenticated: false, username: null } },
       '/auth/login/': { body: { authenticated: true, username: 'admin' } },
       '/projects/': { body: [PROJECT] },
+      '/projects/1/': { body: { ...PROJECT, keys: [] } },
       '/projects/1/issues/': { body: [ISSUE] },
     })
 
@@ -196,6 +197,7 @@ describe('App authentication', () => {
       '/me/': { body: { authenticated: true, username: 'admin' } },
       '/auth/logout/': { body: { authenticated: false, username: null } },
       '/projects/': { body: [PROJECT] },
+      '/projects/1/': { body: { ...PROJECT, keys: [] } },
       '/projects/1/issues/': { body: [] },
     })
 
@@ -209,6 +211,7 @@ describe('App authentication', () => {
     mockApi({
       '/me/': { body: { authenticated: true, username: 'admin' } },
       '/projects/': { body: [PROJECT] },
+      '/projects/1/': { body: { ...PROJECT, keys: [] } },
       '/projects/1/issues/': { body: [] },
     })
 
@@ -223,6 +226,7 @@ describe('Issue stream', () => {
     mockApi({
       '/me/': { body: { authenticated: true, username: 'admin' } },
       '/projects/': { body: [PROJECT] },
+      '/projects/1/': { body: { ...PROJECT, keys: [] } },
       '/projects/1/issues/': { body: [ISSUE] },
     })
 
@@ -237,6 +241,7 @@ describe('Issue stream', () => {
     mockApi({
       '/me/': { body: { authenticated: true, username: 'admin' } },
       '/projects/': { body: [PROJECT] },
+      '/projects/1/': { body: { ...PROJECT, keys: [] } },
       '/projects/1/issues/': { body: [] },
     })
 
@@ -250,6 +255,7 @@ describe('Issue stream', () => {
     const fetchMock = mockApi({
       '/me/': { body: { authenticated: true, username: 'admin' } },
       '/projects/': { body: [PROJECT] },
+      '/projects/1/': { body: { ...PROJECT, keys: [] } },
       '/projects/1/issues/': { body: [ISSUE] },
     })
 
@@ -457,7 +463,9 @@ describe('Project settings', () => {
     expect(await screen.findByText('http://abc123@localhost:8081/1')).toBeInTheDocument()
   })
 
-  it('includes a copy-paste install snippet carrying the DSN', async () => {
+  it('points at the setup instructions rather than carrying a second copy of them', async () => {
+    // They lived here and went stale twice: naming a package that does not exist, and saying
+    // the browser SDK was not available yet. One place, kept correct.
     mockApi({
       '/me/': { body: { authenticated: true, username: 'admin' } },
       '/projects/1/': { body: DETAIL },
@@ -465,8 +473,10 @@ describe('Project settings', () => {
 
     renderSettings()
 
-    const snippet = await screen.findByText(/ObslyMiddleware/)
-    expect(snippet).toHaveTextContent('http://abc123@localhost:8081/1')
+    expect(await screen.findByRole('link', { name: /Setup instructions/ })).toHaveAttribute(
+      'href',
+      '/projects/1/setup',
+    )
   })
 
   it('warns when no key is active, because the project cannot receive events', async () => {
@@ -2547,6 +2557,7 @@ describe('First-run registration', () => {
       '/me/': { body: { authenticated: false, username: null, signup_open: true } },
       '/auth/register/': { status: 201, body: { authenticated: true, username: 'ada' } },
       '/projects/': { body: [PROJECT] },
+      '/projects/1/': { body: { ...PROJECT, keys: [] } },
       '/projects/1/issues/': { body: [ISSUE] },
     })
 
@@ -2586,5 +2597,77 @@ describe('First-run registration', () => {
     renderApp()
 
     expect(await screen.findByLabelText('Password')).toHaveAttribute('autocomplete', 'new-password')
+  })
+})
+
+describe('Project setup', () => {
+  const SETUP_PROJECT = {
+    ...PROJECT,
+    platforms: [] as string[],
+    keys: [
+      {
+        id: 1,
+        label: 'Default',
+        public_key: 'abc123',
+        dsn: 'http://abc123@localhost:8081/1',
+        is_active: true,
+        created_at: new Date().toISOString(),
+      },
+    ],
+  }
+
+  function mount(project: unknown) {
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/': { body: [PROJECT] },
+      '/projects/1/': { body: project },
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/projects/1/setup']}>
+        <App />
+      </MemoryRouter>,
+    )
+  }
+
+  it('offers both tiers rather than asking you to pick one', async () => {
+    // A page load and the backend request it triggers have to be in one project or the trace
+    // cannot join them, so this is not a choice — it is two things to install.
+    mount(SETUP_PROJECT)
+
+    expect(await screen.findByRole('button', { name: 'Python backend' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Browser' })).toBeInTheDocument()
+  })
+
+  it('writes the real DSN into the snippet so nothing has to be edited', async () => {
+    mount(SETUP_PROJECT)
+
+    const snippet = await screen.findByText(/ObslyMiddleware/)
+    expect(snippet).toHaveTextContent('http://abc123@localhost:8081/1')
+  })
+
+  it('gives the browser snippet the package that actually exists', async () => {
+    // The old one said the browser SDK was "not yet available", months after it shipped.
+    mount(SETUP_PROJECT)
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Browser' }))
+
+    const snippet = screen.getByText(/npm install obsly-browser/)
+    expect(snippet).toHaveTextContent('http://abc123@localhost:8081/1')
+  })
+
+  it('says what it is waiting for rather than spinning', async () => {
+    // Nothing arriving can last hours while somebody deploys.
+    mount(SETUP_PROJECT)
+
+    expect(await screen.findByText(/Nothing yet/)).toBeInTheDocument()
+  })
+
+  it('shows what has reported once something has', async () => {
+    mount({ ...SETUP_PROJECT, platforms: ['javascript', 'python'] })
+
+    expect(await screen.findByText('javascript')).toBeInTheDocument()
+    expect(screen.getByText('python')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /issue stream/ })).toBeInTheDocument()
   })
 })

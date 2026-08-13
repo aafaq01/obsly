@@ -39,9 +39,7 @@ def organization(db: None) -> Organization:
 
 @pytest.fixture
 def project(organization: Organization) -> Project:
-    return Project.objects.create(
-        organization=organization, name="Checkout", slug="checkout", platform="python"
-    )
+    return Project.objects.create(organization=organization, name="Checkout", slug="checkout")
 
 
 @pytest.fixture

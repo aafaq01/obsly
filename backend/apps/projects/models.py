@@ -43,13 +43,6 @@ class Organization(TimestampedModel):
         return self.name
 
 
-class Platform(models.TextChoices):
-    PYTHON = "python", "Python"
-    JAVASCRIPT = "javascript", "JavaScript"
-    NODE = "node", "Node.js"
-    OTHER = "other", "Other"
-
-
 class Project(TimestampedModel):
     """One deployable, one codebase. The unit of ingest and of the issue stream."""
 
@@ -58,7 +51,6 @@ class Project(TimestampedModel):
     )
     name = models.CharField(max_length=200)
     slug = models.SlugField(max_length=100)
-    platform = models.CharField(max_length=32, choices=Platform, default=Platform.OTHER)
 
     class Meta:
         ordering = ["name"]

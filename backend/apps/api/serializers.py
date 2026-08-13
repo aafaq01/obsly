@@ -31,8 +31,55 @@ class ProjectKeySerializer(serializers.ModelSerializer[ProjectKey]):
         return obj.dsn(settings.OBSLY_INGEST_ORIGIN)
 
 
+def detected_platforms(project: Project) -> list[str]:
+    """What is actually reporting, rather than what somebody picked from a list.
+
+    A project used to declare one platform at creation, which was wrong in the case this
+    product exists for: a browser page load and the backend request it triggers have to sit in
+    one project or the trace cannot join them. So the same project holds both, and asking for a
+    single answer up front forced a lie.
+
+    Derived, so it is never stale and never needs maintaining.
+    """
+    seen = set(
+        Event.objects.filter(project=project).values_list("platform", flat=True).distinct()[:10]
+    )
+    # A page load is only ever reported by a browser SDK, and it arrives as a transaction
+    # rather than an event — so a frontend with no errors yet would otherwise show nothing.
+    if TransactionModel.objects.filter(project=project, op="pageload").exists():
+        seen.add("javascript")
+
+    return sorted(name for name in seen if name)
+
+
 class ProjectSerializer(serializers.ModelSerializer[Project]):
     organization = serializers.CharField(source="organization.name", read_only=True)
+    platforms = serializers.SerializerMethodField()
+
+    def get_platforms(self, obj: Project) -> list[str]:
+        return detected_platforms(obj)
+
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
+        """Say which name is taken, in the words somebody typed it in.
+
+        DRF's own answer is "The fields organization_id, slug must make a unique set", which is
+        accurate and describes a database constraint rather than the thing on screen. A person
+        naming a project should not have to work out that a slug is derived from the name.
+        """
+        organization = attrs.get("organization") or getattr(self.instance, "organization", None)
+        slug = attrs.get("slug") or getattr(self.instance, "slug", None)
+
+        if organization and slug:
+            clash = Project.objects.filter(organization=organization, slug=slug)
+            if self.instance is not None:
+                clash = clash.exclude(pk=self.instance.pk)
+            if clash.exists():
+                raise serializers.ValidationError(
+                    {"name": f"A project called “{clash.get().name}” already exists here."}
+                )
+
+        return attrs
+
     organization_id = serializers.PrimaryKeyRelatedField(
         source="organization", queryset=Organization.objects.all(), write_only=True
     )
@@ -42,11 +89,17 @@ class ProjectSerializer(serializers.ModelSerializer[Project]):
         model = Project
         # Widened so ProjectDetailSerializer can add `keys`; without the annotation mypy infers
         # a fixed-length tuple and any subclass overriding it is an error.
+        # DRF generates a UniqueTogetherValidator from the model's constraint and runs it
+        # before validate(), so its wording — "the fields organization_id, slug must make a
+        # unique set" — was always the one people met. The check itself moves into validate();
+        # the database constraint remains the actual guarantee either way.
+        validators: list[Any] = []
+
         fields: tuple[str, ...] = (
             "id",
             "name",
             "slug",
-            "platform",
+            "platforms",
             "organization",
             "organization_id",
             "unresolved_count",
@@ -61,7 +114,7 @@ class ProjectDetailSerializer(ProjectSerializer):
             "id",
             "name",
             "slug",
-            "platform",
+            "platforms",
             "organization",
             "organization_id",
             "unresolved_count",

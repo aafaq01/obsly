@@ -33,8 +33,8 @@ class OrganizationAdmin(admin.ModelAdmin[Organization]):
 
 @admin.register(Project)
 class ProjectAdmin(admin.ModelAdmin[Project]):
-    list_display = ("name", "organization", "slug", "platform", "created_at")
-    list_filter = ("platform", "organization")
+    list_display = ("name", "organization", "slug", "created_at")
+    list_filter = ("organization",)
     search_fields = ("name", "slug")
     prepopulated_fields = {"slug": ("name",)}
     inlines = [ProjectKeyInline]

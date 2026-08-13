@@ -2297,6 +2297,14 @@ a.rank__row:hover .rank__name {
   color: var(--ink-muted);
   line-height: 1.5;
 }
+/* A flex column stretches its children, so the submit button spanned the whole 620px card
+   and read as a banner rather than an action. Sized to its label, where the eye already is
+   after the last field. */
+.rule-form button[type='submit'] {
+  align-self: flex-start;
+  padding: 7px 16px;
+}
+
 .rule-form__pair {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -2704,4 +2712,33 @@ button.danger:hover {
   font-size: 12px;
   color: var(--ink-muted);
   font-variant-numeric: tabular-nums;
+}
+
+/* The DSN, and the one button anyone wants next to it. */
+.dsn-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.dsn-row__value {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  word-break: break-all;
+  color: var(--ink);
+}
+
+.setup__copy {
+  margin-top: 8px;
+}
+
+.setup__seen {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-secondary);
 }

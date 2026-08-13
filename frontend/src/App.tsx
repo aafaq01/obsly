@@ -14,6 +14,7 @@ import { Login } from './pages/Login'
 import { Logs } from './pages/Logs'
 import { Performance } from './pages/Performance'
 import { ProjectSettings } from './pages/ProjectSettings'
+import { ProjectSetup } from './pages/ProjectSetup'
 import { Projects } from './pages/Projects'
 import { SpanDetail } from './pages/SpanDetail'
 import { TraceDetail } from './pages/TraceDetail'
@@ -102,6 +103,7 @@ export function App() {
                 <Route path="releases" element={<Releases />} />
                 <Route path="alerts" element={<Alerts />} />
                 <Route path="settings" element={<ProjectSettings />} />
+                <Route path="setup" element={<ProjectSetup />} />
 
                 {/* Detail pages live under the shell too, so opening an issue does not drop you
                     out of the project you were in. */}
