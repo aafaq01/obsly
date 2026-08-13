@@ -7,16 +7,18 @@ import { handle } from '../errors'
 
 type Tier = 'backend' | 'frontend'
 
-const TIERS: { key: Tier; label: string; blurb: string }[] = [
+const TIERS: { key: Tier; label: string; blurb: string; file: string }[] = [
   {
     key: 'backend',
     label: 'Python backend',
-    blurb: 'FastAPI, Starlette or any ASGI app. Errors, traces, spans and logs.',
+    blurb: 'FastAPI, Starlette, or any ASGI app. Errors, traces, spans and logs.',
+    file: 'main.py',
   },
   {
     key: 'frontend',
     label: 'Browser',
     blurb: 'Any page. Errors, Core Web Vitals, and the requests it makes.',
+    file: 'main.ts',
   },
 ]
 
@@ -27,7 +29,10 @@ const TIERS: { key: Tier; label: string; blurb: string }[] = [
  * to be in the same project or the trace cannot join them — which is the whole point of the
  * product — so this is not a choice between them. It is two things to install.
  *
- * The DSN is written into every snippet, so nothing here has to be edited before it is pasted.
+ * Numbered, because the sequence carries information the reader needs rather than decorating
+ * one: the snippet cannot be pasted before the DSN exists, and nothing can report before the
+ * snippet runs. The last step is the one that answers "did it work", so it is the one that
+ * changes on its own.
  */
 export function ProjectSetup() {
   const { projectId } = useParams()
@@ -73,11 +78,12 @@ export function ProjectSetup() {
   const keys = Array.isArray(project.keys) ? project.keys : []
   const dsn = keys.find((key) => key.is_active)?.dsn ?? ''
   const reporting = Array.isArray(project.platforms) ? project.platforms : []
+  const active = TIERS.find((option) => option.key === tier)
 
   const copy = (text: string, what: string) => {
     void navigator.clipboard?.writeText(text)
     setCopied(what)
-    setTimeout(() => setCopied(null), 1500)
+    setTimeout(() => setCopied(null), 1600)
   }
 
   return (
@@ -92,73 +98,91 @@ export function ProjectSetup() {
         this is not a choice between them.
       </p>
 
-      <div className="section">
-        <h2 className="section__title">Your DSN</h2>
-        <p className="chart2__caption">
-          Safe to ship in a browser bundle. It grants write access to this project and no read
-          access to anything.
-        </p>
-        <div className="card card--tight dsn-row">
-          <code className="dsn-row__value">{dsn || 'This project has no active key.'}</code>
-          {dsn && (
-            <button onClick={() => copy(dsn, 'dsn')}>{copied === 'dsn' ? 'Copied' : 'Copy'}</button>
-          )}
-        </div>
-      </div>
-
-      <div className="section">
-        <div className="section__head">
-          <h2 className="section__title">Install</h2>
-          <div className="seg" role="group" aria-label="Tier">
-            {TIERS.map((option) => (
-              <button
-                key={option.key}
-                className={tier === option.key ? 'seg__option seg__option--on' : 'seg__option'}
-                aria-pressed={tier === option.key}
-                onClick={() => setTier(option.key)}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-        </div>
-        <p className="chart2__caption">{TIERS.find((option) => option.key === tier)?.blurb}</p>
-
-        <div className="card card--tight">
-          <pre className="raw">{snippet(tier, dsn)}</pre>
-        </div>
-        <button className="setup__copy" onClick={() => copy(snippet(tier, dsn), tier)}>
-          {copied === tier ? 'Copied' : 'Copy snippet'}
-        </button>
-      </div>
-
-      <div className="section">
-        <h2 className="section__title">What has reported</h2>
-        {reporting.length === 0 ? (
-          /* Not a spinner. Nothing arriving is a state that can last for hours while somebody
-             deploys, and it should say what it is waiting for. */
-          <div className="card card--tight">
-            <p className="logs__empty">
-              Nothing yet. This page checks every few seconds — send one error, or just load a page
-              with the browser SDK on it, and the tier will appear here.
+      <ol className="steps">
+        <li className="step">
+          <div className="step__body">
+            <h2 className="step__title">Copy your DSN</h2>
+            <p className="step__note">
+              Safe to ship in a browser bundle. It grants write access to this project and no read
+              access to anything.
             </p>
+
+            {dsn ? (
+              <div className="keyline">
+                <code className="keyline__value">{dsn}</code>
+                <button onClick={() => copy(dsn, 'dsn')} aria-label="Copy the DSN">
+                  {copied === 'dsn' ? 'Copied' : 'Copy'}
+                </button>
+              </div>
+            ) : (
+              <p className="step__note step__note--warn">
+                This project has no active key, so nothing can report to it yet. Issue one in{' '}
+                <Link to={`/projects/${id}/settings`}>Settings</Link>.
+              </p>
+            )}
           </div>
-        ) : (
-          <div className="card card--tight">
-            <p className="setup__seen">
-              {reporting.map((name) => (
-                <span className="tag tag--sent" key={name}>
-                  {name}
-                </span>
-              ))}
-              <span>
-                {' '}
-                reporting. <Link to={`/projects/${id}/issues`}>Open the issue stream →</Link>
-              </span>
-            </p>
+        </li>
+
+        <li className="step">
+          <div className="step__body">
+            <div className="step__head">
+              <h2 className="step__title">Install the SDK</h2>
+              <div className="seg" role="group" aria-label="Tier">
+                {TIERS.map((option) => (
+                  <button
+                    key={option.key}
+                    className={tier === option.key ? 'seg__option seg__option--on' : 'seg__option'}
+                    aria-pressed={tier === option.key}
+                    onClick={() => setTier(option.key)}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <p className="step__note">{active?.blurb}</p>
+
+            {/* The action sits on the block it acts on. Floating below the card it read as
+                belonging to whatever came next. */}
+            <figure className="code">
+              <figcaption className="code__bar">
+                <span className="code__file mono">{active?.file}</span>
+                <button className="code__copy" onClick={() => copy(snippet(tier, dsn), tier)}>
+                  {copied === tier ? 'Copied' : 'Copy'}
+                </button>
+              </figcaption>
+              <pre className="code__body">{snippet(tier, dsn)}</pre>
+            </figure>
           </div>
-        )}
-      </div>
+        </li>
+
+        <li className={reporting.length > 0 ? 'step step--done' : 'step'}>
+          <div className="step__body">
+            <h2 className="step__title">Wait for the first event</h2>
+
+            {reporting.length === 0 ? (
+              /* Not a spinner. Nothing arriving is a state that can last hours while somebody
+                 deploys, and it should name what it is waiting for rather than imply the page
+                 itself is still loading. */
+              <p className="step__note">
+                <span className="pulse" aria-hidden="true" />
+                Listening. Send one error, or just load a page with the browser SDK on it — this
+                updates on its own.
+              </p>
+            ) : (
+              <p className="step__note">
+                <span className="tag tag--sent">reporting</span>{' '}
+                {reporting.map((name) => (
+                  <code className="mono" key={name}>
+                    {name}
+                  </code>
+                ))}{' '}
+                — <Link to={`/projects/${id}/issues`}>open the issue stream</Link>.
+              </p>
+            )}
+          </div>
+        </li>
+      </ol>
     </>
   )
 }
