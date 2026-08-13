@@ -473,7 +473,7 @@ describe('Project settings', () => {
 
     renderSettings()
 
-    expect(await screen.findByRole('link', { name: /Setup instructions/ })).toHaveAttribute(
+    expect(await screen.findByRole('link', { name: 'Open setup' })).toHaveAttribute(
       'href',
       '/projects/1/setup',
     )
@@ -664,8 +664,13 @@ describe('Performance page', () => {
 
     renderPerf()
 
-    expect(await screen.findByText(/No transactions yet/)).toBeInTheDocument()
+    expect(await screen.findByText(/Nothing from the backend yet/)).toBeInTheDocument()
     expect(screen.getByText(/traces_sample_rate/)).toBeInTheDocument()
+    // The empty state is the next step, not a dead end.
+    expect(screen.getByRole('link', { name: 'Set up the Python SDK' })).toHaveAttribute(
+      'href',
+      '/projects/1/setup?tier=backend',
+    )
   })
 
   it('refetches when the period changes', async () => {
@@ -1743,7 +1748,7 @@ describe('Review findings', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByText(/No transactions yet/)).toBeInTheDocument()
+    expect(await screen.findByText(/Nothing from the backend yet/)).toBeInTheDocument()
     expect(screen.queryByText(/Nothing to rank yet/)).not.toBeInTheDocument()
   })
 })
@@ -2672,5 +2677,75 @@ describe('Project setup', () => {
     expect(await screen.findByText('javascript')).toBeInTheDocument()
     expect(screen.getByText('python')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /issue stream/ })).toBeInTheDocument()
+  })
+})
+
+describe('Contextual setup prompts', () => {
+  const EMPTY_VITALS = {
+    period: '24h',
+    pageloads: 0,
+    bucket_seconds: 3600,
+    series_start: new Date().toISOString(),
+    vitals: [],
+    pages: [],
+    worst: [],
+  }
+
+  function mount(platforms: string[]) {
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/': { body: [PROJECT] },
+      '/projects/1/': { body: { ...PROJECT, platforms, keys: [] } },
+      '/projects/1/vitals/': { body: EMPTY_VITALS },
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/projects/1/insights/frontend']}>
+        <App />
+      </MemoryRouter>,
+    )
+  }
+
+  it('offers the browser SDK on the page that has no browser data', async () => {
+    mount([])
+
+    expect(await screen.findByText('Nothing from the browser yet')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Set up the browser SDK' })).toHaveAttribute(
+      'href',
+      '/projects/1/setup?tier=frontend',
+    )
+  })
+
+  it('says what setting it up would join, when the other half is already reporting', async () => {
+    // Set the backend up first and the frontend page has a specific reason to exist, not a
+    // generic empty state: the two halves become one trace.
+    mount(['python'])
+
+    expect(await screen.findByText(/already reporting/)).toBeInTheDocument()
+    expect(screen.getByText(/join into one trace/)).toBeInTheDocument()
+  })
+
+  it('does not claim the other half is in when nothing is', async () => {
+    mount([])
+
+    await screen.findByText('Nothing from the browser yet')
+    expect(screen.queryByText(/already reporting/)).not.toBeInTheDocument()
+  })
+
+  it('lands the setup page on the tier it was sent for', async () => {
+    // A link that offers the browser SDK and opens on the Python tab has wasted the click.
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/': { body: [PROJECT] },
+      '/projects/1/': { body: { ...PROJECT, platforms: [], keys: [] } },
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/projects/1/setup?tier=frontend']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText(/npm install obsly-browser/)).toBeInTheDocument()
   })
 })

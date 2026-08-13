@@ -4,10 +4,10 @@ import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { api, type DatabaseInsights } from '../api'
 import { EventChart } from '../components/EventChart'
 import { Notice, Skeleton } from '../components/Notice'
+import { SetupPrompt } from '../components/SetupPrompt'
 import { Sparkline } from '../components/Sparkline'
 import { handle } from '../errors'
 import { bucketLabel, formatMs } from '../format'
-import { periodLabel } from '../periods'
 
 type Ranking = 'slowest' | 'heaviest'
 
@@ -65,13 +65,10 @@ export function Database() {
         <div className="page-head">
           <h1>Database</h1>
         </div>
-        <div className="card card--tight">
-          <p className="logs__empty">
-            No queries in the last {periodLabel(period)}. The Python SDK instruments SQLAlchemy
-            automatically; anything else can be wrapped in{' '}
-            <code>obsly.start_span(&quot;db.query&quot;, statement)</code>.
-          </p>
-        </div>
+        <SetupPrompt tier="backend">
+          Queries are recorded by the backend SDK, which instruments SQLAlchemy automatically.
+          Anything else can be wrapped in <code>obsly.start_span(&quot;db.query&quot;, sql)</code>.
+        </SetupPrompt>
       </>
     )
   }

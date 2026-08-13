@@ -3,10 +3,10 @@ import { useParams, useSearchParams } from 'react-router-dom'
 
 import { api, type SpanStats } from '../api'
 import { Notice, Skeleton } from '../components/Notice'
+import { SetupPrompt } from '../components/SetupPrompt'
 import { RankChart } from '../components/RankChart'
 import { handle } from '../errors'
 import { formatMs } from '../format'
-import { periodLabel } from '../periods'
 
 /**
  * The cache tier.
@@ -52,12 +52,10 @@ export function Cache() {
       </div>
 
       {spans.length === 0 ? (
-        <div className="card card--tight">
-          <p className="logs__empty">
-            No cache spans in the last {periodLabel(period)}. Wrap a lookup in{' '}
-            <code>obsly.start_span(&quot;cache.get&quot;, key)</code> and it will appear here.
-          </p>
-        </div>
+        <SetupPrompt tier="backend">
+          Cache lookups are recorded by the backend SDK. Wrap one in{' '}
+          <code>obsly.start_span(&quot;cache.get&quot;, key)</code> and it will appear here.
+        </SetupPrompt>
       ) : (
         <>
           <dl className="meta">

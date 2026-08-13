@@ -6,6 +6,7 @@ import { Select } from '../components/Select'
 import { api, type Performance as PerformanceData } from '../api'
 import { EventChart } from '../components/EventChart'
 import { Notice, Skeleton } from '../components/Notice'
+import { SetupPrompt } from '../components/SetupPrompt'
 import { RankChart } from '../components/RankChart'
 import { handle } from '../errors'
 import { periodLabel } from '../periods'
@@ -127,11 +128,10 @@ export function Performance() {
       <div className="section">
         <h2 className="section__title">Endpoints</h2>
         {rows.length === 0 ? (
-          <Notice>
-            <strong>No transactions yet</strong>
-            Tracing is off by default. Set <code>traces_sample_rate</code> in{' '}
-            <code>obsly.init()</code> — start low, it multiplies volume by your request rate.
-          </Notice>
+          <SetupPrompt tier="backend">
+            Tracing is off by default, so this stays empty until <code>traces_sample_rate</code> is
+            set — start low, it multiplies volume by your request rate.
+          </SetupPrompt>
         ) : (
           <div className="card" style={{ overflowX: 'auto' }}>
             <table className="perf">
