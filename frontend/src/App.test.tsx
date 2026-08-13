@@ -541,6 +541,69 @@ describe('Projects page', () => {
     })
   })
 
+  it('does not ask which organization when there is only one', async () => {
+    // One organization is not a choice, it is a question with one answer — and it makes the
+    // first thing somebody meets a concept they do not have yet.
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/organizations/': { body: [{ id: 1, name: 'Acme', slug: 'acme' }] },
+      '/projects/': { body: [] },
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/projects']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    await userEvent.click(await screen.findByRole('button', { name: 'New project' }))
+
+    expect(screen.queryByLabelText('Organization')).not.toBeInTheDocument()
+  })
+
+  it('asks which organization once there is more than one', async () => {
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/organizations/': {
+        body: [
+          { id: 1, name: 'Acme', slug: 'acme' },
+          { id: 2, name: 'Platform', slug: 'platform' },
+        ],
+      },
+      '/projects/': { body: [] },
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/projects']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    await userEvent.click(await screen.findByRole('button', { name: 'New project' }))
+
+    expect(screen.getByLabelText('Organization')).toBeInTheDocument()
+  })
+
+  it('says why it never asked for a language', async () => {
+    // Every other tool asks for a platform on this form. A project holds an application, not a
+    // runtime, and an absence nobody explains reads as an omission.
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/organizations/': { body: [{ id: 1, name: 'Acme', slug: 'acme' }] },
+      '/projects/': { body: [] },
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/projects']}>
+        <App />
+      </MemoryRouter>,
+    )
+
+    await userEvent.click(await screen.findByRole('button', { name: 'New project' }))
+
+    expect(screen.getByText(/every tier of one application/)).toBeInTheDocument()
+  })
+
   it('derives a slug from the project name', async () => {
     mockApi({
       '/me/': { body: { authenticated: true, username: 'admin' } },
@@ -557,7 +620,7 @@ describe('Projects page', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'New project' }))
     await userEvent.type(screen.getByLabelText('Project name'), 'Checkout API!!')
 
-    expect(await screen.findByText('slug: checkout-api')).toBeInTheDocument()
+    expect(await screen.findByText(/slug: checkout-api/)).toBeInTheDocument()
   })
 })
 
@@ -2677,6 +2740,26 @@ describe('Project setup', () => {
     expect(await screen.findByText('javascript')).toBeInTheDocument()
     expect(screen.getByText('python')).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /issue stream/ })).toBeInTheDocument()
+  })
+
+  it('names the frameworks each SDK fits, not just the one it was written for', async () => {
+    // "FastAPI" alone reads as "Python", and somebody on Starlette or Litestar has no way to
+    // tell whether the middleware is for them.
+    mount(SETUP_PROJECT)
+
+    expect(await screen.findByText(/Starlette, Litestar, Quart/)).toBeInTheDocument()
+  })
+
+  it('says what each SDK does not fit yet', async () => {
+    // The half tools leave out. Without it a Flask shop finds out by installing, and axios
+    // being invisible looks like the SDK is broken rather than not written yet.
+    mount(SETUP_PROJECT)
+
+    expect(await screen.findByText(/Flask/)).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Browser' }))
+
+    expect(screen.getByText(/XHR is not instrumented/)).toBeInTheDocument()
   })
 })
 

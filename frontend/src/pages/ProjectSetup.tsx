@@ -7,17 +7,36 @@ import { handle } from '../errors'
 
 type Tier = 'backend' | 'frontend'
 
-const TIERS: { key: Tier; label: string; blurb: string; file: string }[] = [
+/**
+ * What each SDK does, what it fits, and what it does not fit yet.
+ *
+ * The last one is the part tools normally leave out. "Works with FastAPI" on its own reads as
+ * "works with Python", and somebody on Django finds out by installing it.
+ */
+const TIERS: {
+  key: Tier
+  label: string
+  blurb: string
+  fits: string
+  notYet: string
+  file: string
+}[] = [
   {
     key: 'backend',
     label: 'Python backend',
-    blurb: 'FastAPI, Starlette, or any ASGI app. Errors, traces, spans and logs.',
+    blurb: 'Errors, traces, spans and logs, plus SQLAlchemy query spans.',
+    fits: 'FastAPI, Starlette, Litestar, Quart, Django under ASGI — it is a plain ASGI wrapper. Errors and logs work anywhere Python runs, middleware or not.',
+    notYet:
+      'WSGI apps — Flask, and Django under WSGI — have no middleware, so their requests are untraced. Outside Starlette and FastAPI, transactions are named by raw path rather than route pattern, so /orders/41 and /orders/42 do not group.',
     file: 'main.py',
   },
   {
     key: 'frontend',
     label: 'Browser',
-    blurb: 'Any page. Errors, Core Web Vitals, and the requests it makes.',
+    blurb: 'Errors, Core Web Vitals, and the requests the page makes.',
+    fits: 'React, Vue, Svelte, or a plain HTML page — it hooks the browser, not a framework.',
+    notYet:
+      'XHR is not instrumented, so axios in its default transport is untraced, and a single-page app reports one transaction per page load rather than one per route.',
     file: 'main.ts',
   },
 ]
@@ -142,6 +161,12 @@ export function ProjectSetup() {
               </div>
             </div>
             <p className="step__note">{active?.blurb}</p>
+            <dl className="fits">
+              <dt>Fits</dt>
+              <dd>{active?.fits}</dd>
+              <dt>Not yet</dt>
+              <dd>{active?.notYet}</dd>
+            </dl>
 
             {/* The action sits on the block it acts on. Floating below the card it read as
                 belonging to whatever came next. */}
