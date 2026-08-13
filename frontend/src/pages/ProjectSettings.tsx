@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 
 import { api, type ProjectDetail, type ProjectKey } from '../api'
 import { Breadcrumbs } from '../components/Breadcrumbs'
@@ -43,19 +43,19 @@ export function ProjectSettings() {
 
       <h1 className="page-title">{project.name}</h1>
       <p className="page-subtitle">
-        {project.organization} · {project.platform}
+        {project.organization}
+        {project.platforms.length > 0 && ` · ${project.platforms.join(' · ')}`}
       </p>
 
       <div className="section">
         <h2 className="section__title">Getting started</h2>
-        <div className="card" style={{ padding: 16 }}>
+        <div className="card card--tight">
           {live ? (
-            <>
-              <p style={{ marginTop: 0 }}>
-                Install the SDK and point it at this DSN. Everything below is copy-paste.
-              </p>
-              <pre className="raw">{snippet(live.dsn, project.platform)}</pre>
-            </>
+            <p style={{ margin: 0 }}>
+              <Link to={`/projects/${project.id}/setup`}>Setup instructions →</Link> — install
+              snippets for the backend and the browser, with this project&rsquo;s DSN already in
+              them.
+            </p>
           ) : (
             <Notice>
               <strong>No active key</strong>
@@ -100,22 +100,4 @@ export function ProjectSettings() {
       </div>
     </>
   )
-}
-
-function snippet(dsn: string, platform: string): string {
-  if (platform === 'javascript' || platform === 'node') {
-    return `// not yet available — the browser SDK lands in a later change.\n// DSN: ${dsn}`
-  }
-  return `pip install obsly-sdk
-
-import obsly
-from obsly.integrations.fastapi import ObslyMiddleware
-
-obsly.init(
-    dsn="${dsn}",
-    release="myapp@1.0.0",
-    environment="production",
-)
-
-app.add_middleware(ObslyMiddleware)`
 }

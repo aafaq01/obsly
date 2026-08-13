@@ -4,6 +4,7 @@ from django.test import Client
 from django.urls import reverse
 
 from apps.projects.models import Organization, Project, ProjectKey, generate_public_key
+from tests.conftest import json_body
 
 pytestmark = pytest.mark.django_db
 
@@ -121,3 +122,22 @@ def test_a_new_project_is_born_with_an_ingest_key(
     [key] = project.keys.all()
     assert key.is_active
     assert len(key.public_key) == 32
+
+
+def test_a_duplicate_name_says_which_name_is_taken(
+    staff_client: Client, organization: Organization
+) -> None:
+    """DRF's own answer describes a database constraint — "the fields organization_id, slug
+    must make a unique set" — and a person naming a project should not have to work out that a
+    slug is derived from the name."""
+    Project.objects.create(organization=organization, name="Demo App", slug="demo-app")
+
+    response = staff_client.post(
+        reverse("api:projects"),
+        {"name": "Demo App", "slug": "demo-app", "organization_id": organization.pk},
+        content_type="application/json",
+        secure=True,
+    )
+
+    assert response.status_code == 400
+    assert "Demo App" in json_body(response)["name"][0]

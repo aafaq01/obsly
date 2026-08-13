@@ -44,7 +44,12 @@ export function Issues() {
     <>
       <h1 className="page-title">Issues</h1>
       <p className="page-subtitle">
-        {project ? `${project.organization} · ${project.platform}` : 'Loading…'}
+        {project
+          ? // Defensive: during a deploy a cached bundle can meet an API that predates the
+            // field, and a page that white-screens over a missing subtitle is worse than one
+            // that renders without it.
+            [project.organization, ...(project.platforms ?? [])].join(' · ')
+          : 'Loading…'}
       </p>
 
       <div className="filters">

@@ -1,13 +1,11 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 
 import { Select } from '../components/Select'
 
 import { api, type Organization, type Project } from '../api'
 import { Notice } from '../components/Notice'
 import { handle } from '../errors'
-
-const PLATFORMS = ['python', 'javascript', 'node', 'other']
 
 export function Projects() {
   const [projects, setProjects] = useState<Project[] | null>(null)
@@ -66,7 +64,9 @@ export function Projects() {
                 </p>
                 <div className="issue-row__meta">
                   <span>{project.organization}</span>
-                  <span className="issue-row__culprit">{project.platform}</span>
+                  <span className="issue-row__culprit">
+                    {project.platforms?.join(' · ') || 'nothing reporting yet'}
+                  </span>
                 </div>
               </div>
               <div className="issue-row__num">
@@ -94,8 +94,8 @@ interface NewProjectProps {
 }
 
 function NewProject({ organizations, onCreated, onOrganizationCreated }: NewProjectProps) {
+  const navigate = useNavigate()
   const [name, setName] = useState('')
-  const [platform, setPlatform] = useState('python')
   const [organizationId, setOrganizationId] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -116,15 +116,16 @@ function NewProject({ organizations, onCreated, onOrganizationCreated }: NewProj
         orgId = created.id
       }
 
-      onCreated(
-        await api.createProject({
-          name,
-          slug: slugify(name),
-          platform,
-          organization_id: orgId,
-        }),
-      )
+      const created = await api.createProject({
+        name,
+        slug: slugify(name),
+        organization_id: orgId,
+      })
+      onCreated(created)
       setName('')
+      // Straight to the instructions. A project with nothing pointing at it is not finished,
+      // and the list gives no hint what the next step is.
+      void navigate(`/projects/${created.id}/setup`)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Could not create the project.')
     } finally {
@@ -146,17 +147,6 @@ function NewProject({ organizations, onCreated, onOrganizationCreated }: NewProj
           aria-label="Project name"
           required
         />
-        <Select
-          value={platform}
-          onChange={(event) => setPlatform(event.target.value)}
-          aria-label="Platform"
-        >
-          {PLATFORMS.map((option) => (
-            <option key={option} value={option}>
-              {option}
-            </option>
-          ))}
-        </Select>
         {organizations.length > 0 && (
           <Select
             value={selected ?? ''}

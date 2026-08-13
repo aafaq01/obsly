@@ -2,7 +2,8 @@ export interface Project {
   id: number
   name: string
   slug: string
-  platform: string
+  /** What is actually reporting, derived from the events — not a label somebody picked. */
+  platforms: string[]
   organization: string
   unresolved_count: number
 }
@@ -507,11 +508,36 @@ async function send<T>(
   }
 
   // A 204 has no body to parse, and DELETE is the common case.
-  const payload = (await response.json().catch(() => ({}))) as { detail?: string }
+  const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>
   if (!response.ok) {
-    throw new Error(payload.detail ?? `${path} returned ${response.status}`)
+    throw new Error(errorMessage(payload) ?? `${path} returned ${response.status}`)
   }
   return payload as T
+}
+
+/**
+ * The sentence the server actually wrote.
+ *
+ * DRF puts a single message under `detail` and validation failures under the field they belong
+ * to — or `non_field_errors` for a constraint spanning several. Reading only `detail` meant a
+ * duplicate project name surfaced as "/projects/ returned 400", which tells somebody nothing
+ * about the name they need to change.
+ */
+function errorMessage(payload: Record<string, unknown>): string | null {
+  if (typeof payload.detail === 'string') return payload.detail
+
+  const messages = Object.entries(payload).flatMap(([field, value]) => {
+    const texts = (Array.isArray(value) ? value : [value]).filter(
+      (entry): entry is string => typeof entry === 'string',
+    )
+    // The field name is dropped when it adds nothing: "non_field_errors: …" is noise, and a
+    // named field is usually already obvious from the form the message appears under.
+    return field === 'non_field_errors' || field === 'detail'
+      ? texts
+      : texts.map((text) => `${field}: ${text}`)
+  })
+
+  return messages.length > 0 ? messages.join(' ') : null
 }
 
 const patch = <T>(path: string, body: unknown) => send<T>(path, 'PATCH', body)
@@ -547,12 +573,8 @@ export const api = {
   createOrganization: (name: string, slug: string) =>
     post<Organization>('/organizations/', { name, slug }),
   project: (id: number) => get<ProjectDetail>(`/projects/${id}/`),
-  createProject: (body: {
-    name: string
-    slug: string
-    platform: string
-    organization_id: number
-  }) => post<Project>('/projects/', body),
+  createProject: (body: { name: string; slug: string; organization_id: number }) =>
+    post<Project>('/projects/', body),
   createKey: (projectId: number, label: string) =>
     post<ProjectKey>(`/projects/${projectId}/keys/`, { label }),
   setKeyActive: (keyId: number, is_active: boolean) =>
