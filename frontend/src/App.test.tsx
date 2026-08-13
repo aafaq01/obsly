@@ -2659,10 +2659,11 @@ describe('Project setup', () => {
   })
 
   it('says what it is waiting for rather than spinning', async () => {
-    // Nothing arriving can last hours while somebody deploys.
+    // Nothing arriving can last hours while somebody deploys, so it names the thing rather
+    // than implying the page itself is still loading.
     mount(SETUP_PROJECT)
 
-    expect(await screen.findByText(/Nothing yet/)).toBeInTheDocument()
+    expect(await screen.findByText(/Listening/)).toBeInTheDocument()
   })
 
   it('shows what has reported once something has', async () => {
