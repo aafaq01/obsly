@@ -38,6 +38,8 @@ export function ProjectSetup() {
   const [tier, setTier] = useState<Tier>('backend')
   const [copied, setCopied] = useState<string | null>(null)
 
+  const waiting = (project?.platforms ?? []).length === 0
+
   useEffect(() => {
     let cancelled = false
     const load = () =>
@@ -49,20 +51,28 @@ export function ProjectSetup() {
         .catch(handle(setError))
 
     void load()
-    // Polls while nothing has arrived, so the page turns itself green rather than asking
-    // somebody to guess when to refresh.
-    const timer = setInterval(() => void load(), 5000)
+
+    // Only while nothing has arrived. The poll exists to catch the first event so the page
+    // turns itself green rather than asking somebody to guess when to refresh — once something
+    // has reported there is nothing left to wait for, and a page that keeps polling forever is
+    // a page burning requests on a tab nobody is looking at.
+    const timer = waiting ? setInterval(() => void load(), 5000) : undefined
     return () => {
       cancelled = true
-      clearInterval(timer)
+      if (timer) clearInterval(timer)
     }
-  }, [id])
+  }, [id, waiting])
 
   if (error) return <Notice>{error}</Notice>
   if (!project) return <Skeleton rows={4} />
 
-  const dsn = project.keys.find((key) => key.is_active)?.dsn ?? ''
-  const reporting = project.platforms ?? []
+  // Array.isArray, not `?? []`: if the response is itself an array then `keys` resolves to
+  // Array.prototype.keys — a function, which a nullish check happily passes through. A page
+  // that white-screens over an unexpected shape is worse than one that renders the rest and
+  // says the key is missing.
+  const keys = Array.isArray(project.keys) ? project.keys : []
+  const dsn = keys.find((key) => key.is_active)?.dsn ?? ''
+  const reporting = Array.isArray(project.platforms) ? project.platforms : []
 
   const copy = (text: string, what: string) => {
     void navigator.clipboard?.writeText(text)

@@ -519,6 +519,8 @@ describe('Projects page', () => {
       '/me/': { body: { authenticated: true, username: 'admin' } },
       '/organizations/': { body: [] },
       '/projects/': { body: [] },
+      // Creating a project now lands on its setup page, so that request is part of this flow.
+      '/projects/1/': { body: { ...PROJECT, platforms: [], keys: [] } },
     })
 
     render(

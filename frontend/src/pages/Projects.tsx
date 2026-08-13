@@ -65,7 +65,7 @@ export function Projects() {
                 <div className="issue-row__meta">
                   <span>{project.organization}</span>
                   <span className="issue-row__culprit">
-                    {project.platforms.join(' · ') || 'nothing reporting yet'}
+                    {project.platforms?.join(' · ') || 'nothing reporting yet'}
                   </span>
                 </div>
               </div>
