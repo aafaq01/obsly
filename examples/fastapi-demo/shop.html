@@ -89,6 +89,20 @@
       <button data-fetch="/checkout/c-missing">GET /checkout/c-missing (500s)</button>
       <button data-fetch="/report">GET /report (N+1 inside)</button>
       <button data-fetch="/slow">GET /slow</button>
+      <button id="xhr">GET /slow over XMLHttpRequest (what axios does)</button>
+    </section>
+
+    <section>
+      <h2>Route changes</h2>
+      <p class="why">
+        A single-page app never reloads, so the browser announces nothing. These push a new URL
+        the way a router would; each one reports its own <code>navigation</code> transaction,
+        with its own trace, ending when the route stops fetching. The query-string button
+        changes the URL and is deliberately <em>not</em> a navigation.
+      </p>
+      <button data-route="/shop/orders/42">Go to /shop/orders/42</button>
+      <button data-route="/shop/orders/43">Go to /shop/orders/43</button>
+      <button data-route="?sort=price">Add ?sort=price (not a navigation)</button>
     </section>
 
     <section>
@@ -149,6 +163,26 @@
           } catch (error) {
             say(`${path} → ${error.message}`)
           }
+        })
+      }
+
+      document.getElementById('xhr').addEventListener('click', () => {
+        // axios uses XHR in the browser by default, so this is the shape most applications
+        // actually make requests in — and the one that used to be invisible.
+        const request = new XMLHttpRequest()
+        request.open('GET', '/slow')
+        request.addEventListener('loadend', () => say(`XHR /slow → ${request.status}`))
+        request.send()
+      })
+
+      for (const button of document.querySelectorAll('[data-route]')) {
+        button.addEventListener('click', () => {
+          const to = button.dataset.route
+          history.pushState({}, '', to)
+          say(`pushState → ${location.pathname}${location.search}`)
+          // A real router would fetch what the new screen needs. The transaction ends when
+          // this stops, not when the URL changed.
+          void fetch('/slow')
         })
       }
 
