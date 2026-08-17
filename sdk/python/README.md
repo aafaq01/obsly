@@ -83,10 +83,12 @@ alter behaviour.
 ```python
 # ASGI — Litestar, Quart, or a bare application
 from obsly.integrations.asgi import ObslyMiddleware
+
 app.add_middleware(ObslyMiddleware)
 
 # WSGI — Bottle, Pyramid, or a bare application
 from obsly.integrations.wsgi import ObslyMiddleware
+
 app.wsgi_app = ObslyMiddleware(app.wsgi_app)
 ```
 
