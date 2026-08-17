@@ -6,6 +6,21 @@ import { Notice, Skeleton } from '../components/Notice'
 import { handle } from '../errors'
 
 type Tier = 'backend' | 'frontend'
+type Framework = 'fastapi' | 'django' | 'flask' | 'other'
+
+/**
+ * Which snippet to show, because "Python" is not one answer.
+ *
+ * FastAPI takes a middleware class, Django takes a settings entry, Flask takes a function
+ * call. A page that shows only the FastAPI one is telling three quarters of readers that the
+ * SDK is not for them.
+ */
+const FRAMEWORKS: { key: Framework; label: string }[] = [
+  { key: 'fastapi', label: 'FastAPI' },
+  { key: 'django', label: 'Django' },
+  { key: 'flask', label: 'Flask' },
+  { key: 'other', label: 'Anything else' },
+]
 
 /**
  * What each SDK does, what it fits, and what it does not fit yet.
@@ -25,18 +40,18 @@ const TIERS: {
     key: 'backend',
     label: 'Python backend',
     blurb: 'Errors, traces, spans and logs, plus SQLAlchemy query spans.',
-    fits: 'FastAPI, Starlette, Litestar, Quart, Django under ASGI — it is a plain ASGI wrapper. Errors and logs work anywhere Python runs, middleware or not.',
+    fits: 'FastAPI, Django, Flask, Starlette, Litestar, Quart — ASGI and WSGI both, each named by the route it matched.',
     notYet:
-      'WSGI apps — Flask, and Django under WSGI — have no middleware, so their requests are untraced. Outside Starlette and FastAPI, transactions are named by raw path rather than route pattern, so /orders/41 and /orders/42 do not group.',
+      'Redis and other cache clients have no automatic spans, and neither do outbound calls made with requests or httpx — those need a start_span() around them for now.',
     file: 'main.py',
   },
   {
     key: 'frontend',
     label: 'Browser',
     blurb: 'Errors, Core Web Vitals, and the requests the page makes.',
-    fits: 'React, Vue, Svelte, or a plain HTML page — it hooks the browser, not a framework.',
+    fits: 'React, Vue, Svelte, or a plain HTML page — it hooks the browser, not a framework. fetch and XHR are both traced, so axios is covered, and a single-page app reports one transaction per route change.',
     notYet:
-      'XHR is not instrumented, so axios in its default transport is untraced, and a single-page app reports one transaction per page load rather than one per route.',
+      'Stack traces are minified, because source maps are not uploaded yet — a frame reads a.js:1:48291 rather than a line you can open.',
     file: 'main.ts',
   },
 ]
@@ -62,6 +77,8 @@ export function ProjectSetup() {
   const [params, setParams] = useSearchParams()
   const tier: Tier = params.get('tier') === 'frontend' ? 'frontend' : 'backend'
   const [copied, setCopied] = useState<string | null>(null)
+  const framework: Framework =
+    FRAMEWORKS.find((option) => option.key === params.get('framework'))?.key ?? 'fastapi'
 
   const waiting = (project?.platforms ?? []).length === 0
 
@@ -99,6 +116,7 @@ export function ProjectSetup() {
   const dsn = keys.find((key) => key.is_active)?.dsn ?? ''
   const reporting = Array.isArray(project.platforms) ? project.platforms : []
   const active = TIERS.find((option) => option.key === tier)
+  const code = snippet(tier, framework, dsn)
 
   const copy = (text: string, what: string) => {
     void navigator.clipboard?.writeText(text)
@@ -161,6 +179,25 @@ export function ProjectSetup() {
               </div>
             </div>
             <p className="step__note">{active?.blurb}</p>
+
+            {/* Which Python, not whether Python. The framework decides where the two lines go,
+                and every reader knows their own answer without being asked twice. */}
+            {tier === 'backend' && (
+              <div className="seg seg--wrap" role="group" aria-label="Framework">
+                {FRAMEWORKS.map((option) => (
+                  <button
+                    key={option.key}
+                    className={
+                      framework === option.key ? 'seg__option seg__option--on' : 'seg__option'
+                    }
+                    aria-pressed={framework === option.key}
+                    onClick={() => setParams({ tier, framework: option.key }, { replace: true })}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            )}
             <dl className="fits">
               <dt>Fits</dt>
               <dd>{active?.fits}</dd>
@@ -172,12 +209,12 @@ export function ProjectSetup() {
                 belonging to whatever came next. */}
             <figure className="code">
               <figcaption className="code__bar">
-                <span className="code__file mono">{active?.file}</span>
-                <button className="code__copy" onClick={() => copy(snippet(tier, dsn), tier)}>
+                <span className="code__file mono">{fileFor(tier, framework)}</span>
+                <button className="code__copy" onClick={() => copy(code, tier)}>
                   {copied === tier ? 'Copied' : 'Copy'}
                 </button>
               </figcaption>
-              <pre className="code__body">{snippet(tier, dsn)}</pre>
+              <pre className="code__body">{code}</pre>
             </figure>
           </div>
         </li>
@@ -213,7 +250,12 @@ export function ProjectSetup() {
   )
 }
 
-function snippet(tier: Tier, dsn: string): string {
+function fileFor(tier: Tier, framework: Framework): string {
+  if (tier === 'frontend') return 'main.ts'
+  return framework === 'django' ? 'settings.py' : 'app.py'
+}
+
+function snippet(tier: Tier, framework: Framework, dsn: string): string {
   const placeholder = dsn || 'https://<key>@localhost:8081/<project>'
 
   if (tier === 'frontend') {
@@ -227,14 +269,12 @@ init({
   environment: 'production',
 })
 
-// Same-origin requests now carry a trace header, so the backend
-// request this page makes joins the same trace as the page load.`
+// fetch and XHR now carry a trace header on same-origin requests, so
+// the backend request this page makes joins the page load's trace —
+// and each route change reports its own transaction.`
   }
 
-  return `pip install obsly
-
-import obsly
-from obsly.integrations.fastapi import ObslyMiddleware
+  const init = `import obsly
 
 obsly.init(
     dsn="${placeholder}",
@@ -242,7 +282,59 @@ obsly.init(
     environment="production",
     traces_sample_rate=1.0,
     enable_logs=True,
-)
+)`
+
+  if (framework === 'django') {
+    return `pip install obsly
+
+# settings.py
+${init}
+
+MIDDLEWARE = [
+    "obsly.integrations.django.ObslyMiddleware",
+    *MIDDLEWARE,
+]
+
+# First in the list, so it wraps the others and sees what they raise.
+# Works under WSGI and ASGI alike, and names transactions by the route
+# Django resolved: /orders/<int:pk>/`
+  }
+
+  if (framework === 'flask') {
+    return `pip install obsly
+
+from flask import Flask
+from obsly.integrations.flask import instrument
+
+${init}
+
+app = Flask(__name__)
+instrument(app)
+
+# Transactions are named by the rule Flask matched — /orders/<int:id> —
+# and errors are read from got_request_exception, so nothing about what
+# your app returns changes.`
+  }
+
+  if (framework === 'other') {
+    return `pip install obsly
+
+${init}
+
+# ASGI — Starlette, Litestar, Quart, or anything else speaking it
+from obsly.integrations.asgi import ObslyMiddleware
+app.add_middleware(ObslyMiddleware)
+
+# WSGI — Bottle, Pyramid, or a bare application
+from obsly.integrations.wsgi import ObslyMiddleware
+app.wsgi_app = ObslyMiddleware(app.wsgi_app)`
+  }
+
+  return `pip install obsly
+
+from obsly.integrations.fastapi import ObslyMiddleware
+
+${init}
 
 app.add_middleware(ObslyMiddleware)`
 }

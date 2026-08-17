@@ -118,19 +118,22 @@ is also not everything.
 | | |
 |---|---|
 | **Works anywhere Python does** | `obsly.init()`, `capture_exception()`, `capture_message()`, `set_flag()`, manual `start_transaction()` / `start_span()`, and the `logging` handler. Scripts, workers, Celery tasks, notebooks. |
-| **Automatic request tracing** | Any **ASGI** app, via `ObslyMiddleware` — it is a plain ASGI wrapper, so FastAPI, Starlette, Litestar, Quart and Django-under-ASGI all work. `obsly.integrations.fastapi` re-exports it because that is where a FastAPI user looks; FastAPI *is* Starlette, so there is nothing FastAPI-specific in it. |
+| **ASGI** | `obsly.integrations.asgi.ObslyMiddleware` — a plain ASGI wrapper, so FastAPI, Starlette, Litestar and Quart all work. `obsly.integrations.fastapi` re-exports it because that is where a FastAPI user looks; FastAPI *is* Starlette, so there is nothing FastAPI-specific in it. |
+| **WSGI** | `obsly.integrations.wsgi.ObslyMiddleware` — Bottle, Pyramid, a bare application. The response is timed until its iterable is *closed*, not until the callable returns, so a streamed response is not reported as instant. |
+| **Flask** | `obsly.integrations.flask.instrument(app)`. Its own integration rather than the WSGI one, because from inside Flask the matched rule is available: `/orders/<int:id>` instead of a path with the ids guessed out. Errors come from the `got_request_exception` signal, so nothing about what the app returns changes. |
+| **Django** | `obsly.integrations.django.ObslyMiddleware`, first in `MIDDLEWARE`. One middleware covers both its WSGI and ASGI deployments, names transactions by the resolved route, and takes exceptions from `process_exception` — before Django turns them into a 500. |
 | **Automatic query spans** | SQLAlchemy, via its event hooks. |
-| **Works, but coarsely** | Transaction *names* come from `scope["route"]`, which only Starlette and FastAPI set. Elsewhere the name falls back to the raw path, so `/orders/41` and `/orders/42` become separate rows instead of one `/orders/{id}`. Tracing is correct; the grouping is not. |
-| **Not yet** | **WSGI** — Flask, and Django under WSGI. Nothing structural blocks it; the middleware simply has not been written. Those apps can still report errors and logs, just not traced requests. |
-| **Also not yet** | Redis / cache client instrumentation (the Cache page is fed by manually-named spans today), and outbound `requests` / `httpx` spans. |
+| **Route naming** | The framework's own name where there is one. Where there is not — a bare ASGI or WSGI app — the path has its ids collapsed (`/orders/42` → `/orders/{id}`), because the alternative is one row per id ever requested and a p95 over a population of one. |
+| **Not yet** | Redis and other cache clients have no automatic spans (the Cache page is fed by manually-named spans), and neither do outbound calls through `requests` or `httpx`. |
 
 ### Browser — `obsly-browser` on npm
 
 | | |
 |---|---|
 | **Framework** | None required. It hooks the browser, not a framework — React, Vue, Svelte, or a plain HTML page are all the same `init()` call. There is no `obsly-react` and there does not need to be. |
-| **Collects** | `window.onerror` and `unhandledrejection`, Core Web Vitals (LCP, CLS, INP, FCP, TTFB) via `PerformanceObserver`, and `fetch()` spans. Reported on `visibilitychange` / `pagehide`. |
-| **Not yet** | **XHR is not patched**, so axios in its default browser transport is untraced. A single-page app reports **one transaction per page load**, not one per route change. No React error boundary helper. No source maps, so frames are minified. |
+| **Collects** | `window.onerror` and `unhandledrejection`, Core Web Vitals (LCP, CLS, INP, FCP, TTFB) via `PerformanceObserver`, and spans for both `fetch()` **and `XMLHttpRequest`** — so axios, which speaks XHR in the browser, is covered. |
+| **Route changes** | A single-page app reports a `navigation` transaction per route change, with its own trace. It ends when the route stops fetching (one second idle, thirty second cap), because a navigation has no load event: ending it at the URL change would measure nothing, and ending it when the reader leaves would measure how long they read. A query-string change is not a navigation. Turn it off with `trackRouteChanges: false` on a server-rendered site. |
+| **Not yet** | **No source maps**, so frames are minified: `a.js:1:48291` names no line anyone can open. Web Vitals attach to the page load only — a route change has no Largest Contentful Paint — and those that finalise late (CLS, INP) are lost if the reader navigates first. |
 
 ### Node.js
 
@@ -146,7 +149,7 @@ Each of these is a step above where somebody hits a wall, not a feature from a l
 
 | Gap | Step it blocks | Branch |
 |---|---|---|
-| WSGI middleware; XHR spans; SPA route transactions; a Node SDK | §3 — "install the SDK" ends here for a Flask or Express shop | `feat/sdk-frameworks` |
+| A Node SDK | §3 — "install the SDK" still ends here for an Express or Fastify service | not scheduled |
 | Source maps | §5 — a browser issue names `a.js:1:48291`, which is no line anyone can open | `feat/source-maps` |
 | Breadcrumbs | §5, on-call — the error says what broke, nothing says what the user did to get there | `feat/breadcrumbs` |
 | User context | §5, owner — issue counts are event counts, so one user retrying forty times reads as forty people | `feat/user-context` |

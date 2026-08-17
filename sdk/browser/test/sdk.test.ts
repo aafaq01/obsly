@@ -130,8 +130,7 @@ describe('Trace propagation', () => {
 
     const spans: unknown[] = []
     restore = instrumentFetch({
-      traceId: 'a'.repeat(32),
-      sampled: true,
+      context: () => ({ traceId: 'a'.repeat(32), sampled: true }),
       shouldTrace: () => true,
       onSpan: (span) => spans.push(span),
     })
@@ -150,8 +149,7 @@ describe('Trace propagation', () => {
     globalThis.fetch = original as unknown as typeof fetch
 
     restore = instrumentFetch({
-      traceId: 'a'.repeat(32),
-      sampled: true,
+      context: () => ({ traceId: 'a'.repeat(32), sampled: true }),
       shouldTrace: () => false,
       onSpan: () => {},
     })
@@ -168,8 +166,7 @@ describe('Trace propagation', () => {
     globalThis.fetch = original as unknown as typeof fetch
 
     restore = instrumentFetch({
-      traceId: 'a'.repeat(32),
-      sampled: true,
+      context: () => ({ traceId: 'a'.repeat(32), sampled: true }),
       shouldTrace: () => true,
       onSpan: () => {},
     })
@@ -189,8 +186,7 @@ describe('Trace propagation', () => {
 
     const spans: { status: string }[] = []
     restore = instrumentFetch({
-      traceId: 'a'.repeat(32),
-      sampled: true,
+      context: () => ({ traceId: 'a'.repeat(32), sampled: true }),
       shouldTrace: () => true,
       onSpan: (span) => spans.push(span),
     })
@@ -202,8 +198,7 @@ describe('Trace propagation', () => {
   it('restores the original fetch when torn down', async () => {
     const original = globalThis.fetch
     restore = instrumentFetch({
-      traceId: 'a'.repeat(32),
-      sampled: true,
+      context: () => ({ traceId: 'a'.repeat(32), sampled: true }),
       shouldTrace: () => true,
       onSpan: () => {},
     })

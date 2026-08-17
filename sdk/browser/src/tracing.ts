@@ -34,9 +34,22 @@ export function traceHeader(traceId: string, spanId: string, sampled: boolean): 
  * turns a simple request into a preflighted one, and an SDK that breaks somebody's payment
  * provider to draw a nicer chart has made the wrong trade.
  */
-export function instrumentFetch(options: {
+export interface TraceContext {
   traceId: string
   sampled: boolean
+}
+
+/**
+ * Read at request time, not at install time.
+ *
+ * A single-page app changes trace on every route change, and an instrumentation that captured
+ * the id when it was installed would stamp every request for the rest of the session with the
+ * first page's trace.
+ */
+export type ContextSource = () => TraceContext
+
+export function instrumentFetch(options: {
+  context: ContextSource
   shouldTrace: (url: string) => boolean
   onSpan: (span: Span) => void
 }): () => void {
@@ -55,13 +68,14 @@ export function instrumentFetch(options: {
     const spanId = hex(8)
     const started = performance.now()
     const startedAt = new Date().toISOString()
+    const { traceId, sampled } = options.context()
 
     // Headers() rather than a plain object: init.headers may be a Headers, an array of pairs,
     // or an object, and assuming one of the three silently drops the caller's own headers.
     const headers = new Headers(
       init?.headers ?? (input instanceof Request ? input.headers : undefined),
     )
-    headers.set(TRACE_HEADER, traceHeader(options.traceId, spanId, options.sampled))
+    headers.set(TRACE_HEADER, traceHeader(traceId, spanId, sampled))
 
     const finish = (status: string, httpStatus?: number) => {
       const duration = performance.now() - started
@@ -92,5 +106,135 @@ export function instrumentFetch(options: {
 
   return () => {
     globalThis.fetch = original
+  }
+}
+
+interface XhrState {
+  spanId: string
+  method: string
+  url: string
+  started: number
+  startedAt: string
+  traced: boolean
+}
+
+const XHR_STATE = Symbol('obsly.xhr')
+
+type TrackedXhr = XMLHttpRequest & { [XHR_STATE]?: XhrState }
+
+/**
+ * The other half of the requests a page makes.
+ *
+ * axios uses XHR in the browser by default, and so does every jQuery-era codebase still in
+ * production. Instrumenting only fetch meant those applications saw an empty waterfall and
+ * reasonably concluded the SDK was broken.
+ *
+ * Patching the prototype rather than wrapping individual instances, because the application
+ * creates them and hands us no seam.
+ */
+export function instrumentXhr(options: {
+  context: ContextSource
+  shouldTrace: (url: string) => boolean
+  onSpan: (span: Span) => void
+}): () => void {
+  const XHR = globalThis.XMLHttpRequest
+  if (typeof XHR !== 'function') return () => {}
+
+  const originalOpen = XHR.prototype.open
+  const originalSend = XHR.prototype.send
+
+  XHR.prototype.open = function patchedOpen(
+    this: TrackedXhr,
+    method: string,
+    url: string | URL,
+    ...rest: unknown[]
+  ) {
+    const href = typeof url === 'string' ? url : url.href
+    this[XHR_STATE] = {
+      spanId: hex(8),
+      method: String(method || 'GET').toUpperCase(),
+      url: href,
+      started: 0,
+      startedAt: '',
+      traced: options.shouldTrace(href),
+    }
+    return originalOpen.apply(this, [method, url, ...rest] as never)
+  } as typeof XHR.prototype.open
+
+  XHR.prototype.send = function patchedSend(this: TrackedXhr, body?: unknown) {
+    const state = this[XHR_STATE]
+
+    if (state?.traced) {
+      state.started = performance.now()
+      state.startedAt = new Date().toISOString()
+
+      const { traceId, sampled } = options.context()
+      try {
+        this.setRequestHeader(TRACE_HEADER, traceHeader(traceId, state.spanId, sampled))
+      } catch {
+        // A header set on a request the application already sent, or in a state the browser
+        // refuses. Measuring must never be the reason a request fails.
+      }
+
+      // loadend, not load: it fires for success, error, timeout and abort alike, so a request
+      // that never answered — the most interesting kind — still leaves a span behind.
+      this.addEventListener('loadend', () => {
+        const status = this.status
+        options.onSpan({
+          span_id: state.spanId,
+          parent_span_id: '',
+          op: 'http.client',
+          description: `${state.method} ${state.url}`,
+          status: status === 0 ? 'internal_error' : status < 400 ? 'ok' : 'internal_error',
+          start_timestamp: state.startedAt,
+          timestamp: new Date().toISOString(),
+          duration_ms: performance.now() - state.started,
+          data: status === 0 ? {} : { 'http.status_code': status },
+        })
+      })
+    }
+
+    return originalSend.apply(this, [body] as never)
+  } as typeof XHR.prototype.send
+
+  return () => {
+    XHR.prototype.open = originalOpen
+    XHR.prototype.send = originalSend
+  }
+}
+
+/**
+ * Route changes in a single-page app, which the browser never announces.
+ *
+ * `popstate` covers Back and Forward. Everything else — every router in every framework —
+ * goes through pushState or replaceState, which fire no event at all, so the only way to know
+ * the user moved is to watch the two functions.
+ */
+export function instrumentHistory(onRouteChange: (url: string) => void): () => void {
+  const history = globalThis.history as History | undefined
+  if (!history || typeof history.pushState !== 'function') return () => {}
+
+  const originalPush = history.pushState.bind(history)
+  const originalReplace = history.replaceState.bind(history)
+
+  const announce = () => {
+    // A microtask, so location has already been updated when the listener reads it.
+    queueMicrotask(() => onRouteChange(location.href))
+  }
+
+  history.pushState = function patchedPush(...args: Parameters<History['pushState']>) {
+    originalPush(...args)
+    announce()
+  }
+  history.replaceState = function patchedReplace(...args: Parameters<History['replaceState']>) {
+    originalReplace(...args)
+    announce()
+  }
+  addEventListener('popstate', announce)
+
+  return () => {
+    history.pushState = originalPush
+    history.replaceState = originalReplace
+    removeEventListener('popstate', announce)
   }
 }

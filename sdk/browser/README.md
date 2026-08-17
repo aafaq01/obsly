@@ -21,9 +21,12 @@ That is the whole setup. From then on:
 - **Uncaught errors and unhandled rejections** are captured with parsed stack frames.
 - **Core Web Vitals** (LCP, INP, CLS, FCP, TTFB) are measured from the browser's own timeline
   and sent with the page-load transaction.
-- **Same-origin `fetch` calls** get a span and an `obsly-trace` header, so the backend SDK
-  continues the same trace. One waterfall holds the page load, the request it made, and the
-  query that made it slow.
+- **Same-origin `fetch` and `XMLHttpRequest` calls** get a span and an `obsly-trace` header, so
+  the backend SDK continues the same trace. One waterfall holds the page load, the request it
+  made, and the query that made it slow. XHR is instrumented because axios uses it in the
+  browser by default, and a page whose whole HTTP layer is invisible looks like a broken SDK.
+- **Route changes in a single-page app** report their own `navigation` transaction, with their
+  own trace.
 
 ## Why it is shaped this way
 
@@ -42,6 +45,17 @@ draw a nicer waterfall is the wrong trade — pass `shouldTrace` if you own both
 **Cookies are never sent.** The DSN public key is the credential and is designed to be public.
 Carrying a customer's session cookie to our origin would be a hole in their site.
 
+**A route change ends when the route goes quiet.** A navigation has no load event. Ending it
+when the URL changed would measure nothing — the data the new screen needs has not been fetched
+yet — and ending it when the reader leaves would measure how long they read the page. So it ends
+after one second with no new request, capped at thirty. A query-string change is not a
+navigation: a facet that rewrites `?sort=price` has not gone anywhere, and counting it would turn
+every click on a filter into its own page view.
+
+**Vitals belong to the page load, and only to it.** A route change three screens later has no
+Largest Contentful Paint, and attaching one there would put a number in a column that means
+something else.
+
 **Vitals are reported on `visibilitychange`, not `unload`.** On mobile a tab is frequently
 frozen without ever firing `unload`, and those page loads would simply never be measured.
 
@@ -55,15 +69,16 @@ turned off.
 
 ## Options
 
-| Option             | Default                 | What it does                                                                                                                                                     |
-| ------------------ | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `dsn`              | —                       | Required. Same string the Python SDK takes.                                                                                                                      |
-| `environment`      | `production`            | Tag on every event.                                                                                                                                              |
-| `release`          | `''`                    | Tag on every event, for release health.                                                                                                                          |
-| `tracesSampleRate` | `1`                     | Fraction of page loads that report a transaction. Errors are never sampled away.                                                                                 |
-| `shouldTrace`      | same-origin             | Which requests carry a trace header.                                                                                                                             |
-| `transactionName`  | route with ids replaced | `/orders/42` and `/orders/43` are the same page. Without this, every id becomes its own transaction name and the aggregate is millions of routes seen once each. |
-| `maxSpans`         | `100`                   | A page firing a request per keystroke must not grow this array until the tab runs out of memory.                                                                 |
+| Option              | Default                 | What it does                                                                                                                                                     |
+| ------------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dsn`               | —                       | Required. Same string the Python SDK takes.                                                                                                                      |
+| `environment`       | `production`            | Tag on every event.                                                                                                                                              |
+| `release`           | `''`                    | Tag on every event, for release health.                                                                                                                          |
+| `tracesSampleRate`  | `1`                     | Fraction of page loads that report a transaction. Errors are never sampled away.                                                                                 |
+| `shouldTrace`       | same-origin             | Which requests carry a trace header.                                                                                                                             |
+| `transactionName`   | route with ids replaced | `/orders/42` and `/orders/43` are the same page. Without this, every id becomes its own transaction name and the aggregate is millions of routes seen once each. |
+| `maxSpans`          | `100`                   | A page firing a request per keystroke must not grow this array until the tab runs out of memory.                                                                 |
+| `trackRouteChanges` | `true`                  | Report a transaction per route change. Turn it off on a server-rendered site, where every navigation is a real page load and the history API is never used.      |
 
 ## Reporting an error yourself
 

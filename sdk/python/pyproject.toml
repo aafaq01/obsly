@@ -1,6 +1,6 @@
 [project]
 name = "obsly"
-version = "0.2.0"
+version = "0.3.0"
 description = "Obsly SDK for Python — errors, tracing, logs and performance, with no runtime dependencies"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -16,6 +16,9 @@ keywords = [
     "opentelemetry",
     "fastapi",
     "asgi",
+    "wsgi",
+    "flask",
+    "django",
 ]
 
 # The zero-dependency promise is the SDK's whole point, and an empty list is how it is stated
@@ -49,8 +52,11 @@ dev = [
     "mypy>=1.14",
     "fastapi>=0.115",
     "httpx2>=0.1",
-    # Exercised by the optional integration test, never a runtime dependency.
+    # All exercised by optional integration tests, never runtime dependencies. Every one of
+    # these is a framework the SDK claims to support, and a claim nothing runs is a guess.
     "sqlalchemy>=2.0",
+    "flask>=3.0",
+    "django>=5.0",
 ]
 
 [build-system]
@@ -84,7 +90,7 @@ warn_unreachable = true
 # SQLAlchemy is an optional integration, not a dependency. The SDK must type-check on a
 # machine that does not have it.
 [[tool.mypy.overrides]]
-module = "sqlalchemy.*"
+module = ["sqlalchemy.*", "flask.*", "django.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

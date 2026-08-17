@@ -1,6 +1,6 @@
 {
   "name": "obsly-browser",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "description": "Obsly browser SDK \u2014 errors, Core Web Vitals and traces that join up with the backend",
   "license": "MIT",
   "author": "Aafaq Rana <m.aafaq.rana@gmail.com>",
@@ -22,7 +22,10 @@
     "monitoring",
     "rum",
     "browser",
-    "performance"
+    "performance",
+    "xhr",
+    "spa",
+    "single-page"
   ],
   "type": "module",
   "main": "./dist/index.js",

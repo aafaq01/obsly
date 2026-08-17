@@ -15,6 +15,7 @@ from typing import Any
 from urllib.parse import unquote
 
 from obsly.client import capture_exception, get_client
+from obsly.integrations._http import parameterize, safe_headers, status_label
 from obsly.tracing import TRACE_HEADER, parse_trace_header
 
 logger = logging.getLogger("obsly")
@@ -22,13 +23,6 @@ logger = logging.getLogger("obsly")
 Scope = dict[str, Any]
 Receive = Any
 Send = Any
-
-# Headers that identify a person or authorise a request. Never sent, regardless of
-# send_default_pii — an SDK that can leak an Authorization header into a third-party store is
-# a vulnerability wearing a feature's clothes.
-_ALWAYS_STRIP = frozenset(
-    {"authorization", "proxy-authorization", "cookie", "set-cookie", "x-api-key", "x-auth-token"}
-)
 
 
 class ObslyMiddleware:
@@ -51,7 +45,7 @@ class ObslyMiddleware:
         # The name is filled in after routing: the matched pattern only exists on the scope
         # once Starlette has resolved it, and a raw path here would make every id its own row.
         with client.start_transaction(
-            _path(scope),
+            _name(scope),
             op="http.server",
             trace_id=trace_id,
             parent_span_id=parent_span_id,
@@ -68,15 +62,15 @@ class ObslyMiddleware:
                 await self.app(scope, receive, send_wrapper)
             except Exception as exc:
                 transaction.status = "internal_error"
-                transaction.name = _route_pattern(scope) or _path(scope)
+                transaction.name = _name(scope)
                 # Report, then re-raise unchanged. The application's own error handling — and
                 # the 500 the client is waiting for — must behave exactly as it would
                 # without us.
                 self._report(exc, scope)
                 raise
             else:
-                transaction.name = _route_pattern(scope) or _path(scope)
-                transaction.status = _status_label(status_holder.get("status", 200))
+                transaction.name = _name(scope)
+                transaction.status = status_label(status_holder.get("status", 200))
                 transaction.data["http.status_code"] = status_holder.get("status", 200)
                 transaction.data["http.method"] = scope.get("method", "")
 
@@ -105,7 +99,7 @@ class ObslyMiddleware:
             "path": path,
             # The matched route pattern, not the concrete path — "/items/{id}" groups, while
             # "/items/8123" makes a separate issue for every id ever requested.
-            "route": _route_pattern(scope) or path,
+            "route": _name(scope),
             "scheme": scope.get("scheme", ""),
             "http_version": scope.get("http_version", ""),
         }
@@ -131,15 +125,13 @@ def _route_pattern(scope: Scope) -> str:
 
 
 def _headers(scope: Scope, *, include_all: bool) -> dict[str, str]:
-    safe = {}
-    for raw_name, raw_value in scope.get("headers", []):
-        name = raw_name.decode("latin-1").lower()
-        if name in _ALWAYS_STRIP:
-            continue
-        if not include_all and name not in ("content-type", "user-agent", "host", "referer"):
-            continue
-        safe[name] = raw_value.decode("latin-1")[:500]
-    return safe
+    return safe_headers(
+        (
+            (raw_name.decode("latin-1"), raw_value.decode("latin-1"))
+            for raw_name, raw_value in scope.get("headers", [])
+        ),
+        include_all=include_all,
+    )
 
 
 def _header(scope: Scope, name: str) -> str | None:
@@ -150,18 +142,11 @@ def _header(scope: Scope, name: str) -> str | None:
     return None
 
 
-def _path(scope: Scope) -> str:
-    return str(scope.get("path", "/"))
+def _name(scope: Scope) -> str:
+    """The route pattern if the framework matched one, otherwise the path with its ids removed.
 
-
-def _status_label(status: int) -> str:
-    """gRPC-style labels, so "did it work" is one field rather than a numeric range check."""
-    if status < 400:
-        return "ok"
-    if status == 404:
-        return "not_found"
-    if status in (401, 403):
-        return "unauthenticated"
-    if status < 500:
-        return "invalid_argument"
-    return "internal_error"
+    Only Starlette and FastAPI put `route` on the scope. Everything else speaking ASGI —
+    Litestar, Quart, Django — used to land here as a raw path, which meant /orders/41 and
+    /orders/42 were two endpoints and the aggregate was one row per id ever requested.
+    """
+    return _route_pattern(scope) or parameterize(str(scope.get("path", "/")))

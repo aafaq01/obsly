@@ -2626,6 +2626,15 @@ button.danger:hover {
   overflow: hidden;
 }
 
+/* Four options rather than two, and on a narrow screen they have to go somewhere. Sized to its
+   own content: stretched across the column it reads as an empty bar with buttons at one end. */
+.seg--wrap {
+  display: inline-flex;
+  flex-wrap: wrap;
+  width: fit-content;
+  margin: 0 0 12px;
+}
+
 .seg__option {
   border: none;
   border-radius: 0;

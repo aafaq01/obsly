@@ -1,10 +1,10 @@
 {
   "name": "obsly-fastapi-demo",
   "version": "0.1.0",
-  "description": "The browser half of the Obsly demo — installs the published SDK from npm",
+  "description": "The browser half of the Obsly demo \u2014 installs the published SDK from npm",
   "private": true,
   "type": "module",
   "dependencies": {
-    "obsly-browser": "^0.1.0"
+    "obsly-browser": "^0.3.0"
   }
 }
