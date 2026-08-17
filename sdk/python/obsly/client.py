@@ -20,7 +20,9 @@ from obsly.transport import Transport, build_envelope
 
 _sdk_log = logging.getLogger("obsly")
 
-SDK = {"name": "obsly.python", "version": "0.1.0"}
+# Kept in step with pyproject.toml by a test — it is the version the server records
+# against every event, so a stale number here makes "which SDK sent this" a lie.
+SDK = {"name": "obsly.python", "version": "0.3.0"}
 
 # An application evaluating thousands of distinct flags is misusing them, and an unbounded map
 # here would let a flag name built from a user id grow without limit inside a long-lived

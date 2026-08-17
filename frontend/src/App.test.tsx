@@ -2686,7 +2686,7 @@ describe('Project setup', () => {
     ],
   }
 
-  function mount(project: unknown) {
+  function mount(project: unknown, at = '/projects/1/setup') {
     mockApi({
       '/me/': { body: { authenticated: true, username: 'admin' } },
       '/projects/': { body: [PROJECT] },
@@ -2694,7 +2694,7 @@ describe('Project setup', () => {
     })
 
     render(
-      <MemoryRouter initialEntries={['/projects/1/setup']}>
+      <MemoryRouter initialEntries={[at]}>
         <App />
       </MemoryRouter>,
     )
@@ -2743,23 +2743,65 @@ describe('Project setup', () => {
   })
 
   it('names the frameworks each SDK fits, not just the one it was written for', async () => {
-    // "FastAPI" alone reads as "Python", and somebody on Starlette or Litestar has no way to
-    // tell whether the middleware is for them.
+    // "FastAPI" alone reads as "Python", and somebody on Django or Flask has no way to tell
+    // whether the middleware is for them.
     mount(SETUP_PROJECT)
 
-    expect(await screen.findByText(/Starlette, Litestar, Quart/)).toBeInTheDocument()
+    expect(await screen.findByText(/FastAPI, Django, Flask/)).toBeInTheDocument()
   })
 
   it('says what each SDK does not fit yet', async () => {
-    // The half tools leave out. Without it a Flask shop finds out by installing, and axios
-    // being invisible looks like the SDK is broken rather than not written yet.
+    // The half tools leave out. Stated at the same weight as what it does fit, so nobody
+    // discovers the gap by installing it.
     mount(SETUP_PROJECT)
 
-    expect(await screen.findByText(/Flask/)).toBeInTheDocument()
+    expect(await screen.findByText(/no automatic spans/)).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Browser' }))
 
-    expect(screen.getByText(/XHR is not instrumented/)).toBeInTheDocument()
+    expect(screen.getByText(/source maps are not uploaded yet/)).toBeInTheDocument()
+  })
+
+  it('offers a snippet per framework, because "Python" is not one answer', async () => {
+    // FastAPI takes a middleware class, Django a settings entry, Flask a function call. One
+    // snippet for all three tells two thirds of readers the SDK is not for them.
+    mount(SETUP_PROJECT)
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Django' }))
+
+    expect(screen.getByText(/obsly.integrations.django.ObslyMiddleware/)).toBeInTheDocument()
+    // The file the snippet belongs in changes with it: Django's two lines live in settings.py.
+    expect(screen.getByText('settings.py')).toBeInTheDocument()
+  })
+
+  it('gives Flask the call it actually takes', async () => {
+    mount(SETUP_PROJECT)
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Flask' }))
+
+    expect(screen.getByText(/from obsly.integrations.flask import instrument/)).toBeInTheDocument()
+  })
+
+  it('shows both wrappers for a framework nobody named', async () => {
+    // Litestar, Bottle, Pyramid, a bare application. ASGI and WSGI cover the rest between
+    // them, and the reader knows which one they are.
+    mount(SETUP_PROJECT)
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Anything else' }))
+
+    const snippet = screen.getByText(/integrations.asgi/)
+    expect(snippet).toHaveTextContent('obsly.integrations.wsgi')
+  })
+
+  it('opens on the framework the link named', async () => {
+    // The framework lives in the URL rather than in component state, so a link to "how do I
+    // set this up" lands where it was sent instead of on FastAPI.
+    mount(SETUP_PROJECT, '/projects/1/setup?tier=backend&framework=flask')
+
+    expect(
+      await screen.findByText(/from obsly.integrations.flask import instrument/),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Flask' })).toHaveAttribute('aria-pressed', 'true')
   })
 })
 

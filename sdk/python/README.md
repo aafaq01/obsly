@@ -47,6 +47,57 @@ Unhandled exceptions are reported and then **re-raised unchanged** — your erro
 > If your app registers its own `add_exception_handler(Exception, ...)`, Starlette handles the
 > error before any middleware sees it. Call `obsly.capture_exception()` inside that handler too.
 
+### Django
+
+```python
+# settings.py
+MIDDLEWARE = [
+    "obsly.integrations.django.ObslyMiddleware",
+    *MIDDLEWARE,
+]
+```
+
+First in the list, so it wraps everything below it and sees what they raise. One middleware
+covers both WSGI and ASGI deployments. Transactions are named by the route Django resolved
+(`/orders/<int:pk>/`), and exceptions are taken from `process_exception` — before Django turns
+them into a 500, and without changing the response it produces.
+
+### Flask
+
+```python
+from flask import Flask
+from obsly.integrations.flask import instrument
+
+app = Flask(__name__)
+instrument(app)
+```
+
+Its own integration rather than the WSGI middleware, because from inside Flask the matched rule
+is available: `/orders/<int:id>`, the name your code is written in, rather than a path with the
+ids guessed out of it. Errors come from the `got_request_exception` signal — an integration that
+installed an error handler would change what your application returns, and reporting must not
+alter behaviour.
+
+### Anything else
+
+```python
+# ASGI — Litestar, Quart, or a bare application
+from obsly.integrations.asgi import ObslyMiddleware
+app.add_middleware(ObslyMiddleware)
+
+# WSGI — Bottle, Pyramid, or a bare application
+from obsly.integrations.wsgi import ObslyMiddleware
+app.wsgi_app = ObslyMiddleware(app.wsgi_app)
+```
+
+Where the framework can name the route it matched, that name is used. Where it cannot, the path
+has its ids collapsed — `/orders/42` becomes `/orders/{id}` — because the alternative is one
+transaction per id ever requested, and a p95 computed over a population of one.
+
+The WSGI middleware times the response until its iterable is **closed**, not until the
+application callable returns. A streaming response finishes when the server finishes sending it,
+and measuring the call alone would report a slow download as instant.
+
 ### Manual capture
 
 ```python

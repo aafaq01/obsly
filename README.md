@@ -18,8 +18,9 @@ Early. Building step by step, one feature branch at a time. See [docs/roadmap.md
 for what has landed and what is next.
 
 [docs/user-journey.md](docs/user-journey.md) walks the path from `docker compose up` to the first
-insight, and states plainly **which frameworks each SDK covers and which it does not** — ASGI is
-instrumented, WSGI is not yet; the browser SDK is framework-agnostic but does not patch XHR.
+insight, and states plainly **which frameworks each SDK covers and which it does not**. In short:
+FastAPI, Django, Flask and any other ASGI or WSGI application on the Python side; any browser
+framework on the other, tracing `fetch` and XHR alike and reporting a transaction per route change.
 
 ## Architecture
 

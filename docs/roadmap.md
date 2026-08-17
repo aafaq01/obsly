@@ -54,6 +54,7 @@ least able to answer.
 | 40 | `feat/setup-polish` | One setup page for every tier, numbered, with a live "has anything reported" step |
 | 41 | `feat/contextual-setup` | An empty layer page offers to instrument its own tier, and says what the other half would join |
 | 42 | `feat/journey` | [user-journey.md](user-journey.md); framework coverage stated in the product; no organization question when there is one organization |
+| 43 | `feat/sdk-frameworks` | WSGI, Flask and Django integrations; XHR spans and per-route SPA transactions in the browser |
 
 ## Coverage against the reference
 
@@ -73,7 +74,7 @@ stand, so the gap is a fact rather than a feeling.
 | FR-MET — metrics | Partial. Derived metrics only — see "on metrics" below |
 | FR-ALR — alerting | Partial. Webhook delivery; no digests, no native Slack, no ownership routing |
 | FR-API — APIs | Partial. REST API; no CLI, no release-tagging CI integration |
-| FR-SYM — source maps | None. Browser traces show minified frames |
+| FR-SYM — source maps | None. Browser traces show minified frames — now the largest single gap in the browser story |
 | FR-QRY — Discover, query language, custom dashboards | None. Filters are per-page and fixed |
 | FR-ORG — teams, roles, per-project access | None. Every signed-in user sees every project |
 | FR-QTA — quotas, spike protection | None |
@@ -87,7 +88,6 @@ already run into.
 
 | Branch | Delivers | Why it matters |
 |---|---|---|
-| `feat/sdk-frameworks` | WSGI middleware (Flask, Django), XHR instrumentation, per-route SPA transactions, route-pattern naming outside Starlette | The install step ends here for a Flask shop, and axios in its default transport is invisible. See [user-journey.md](user-journey.md) § 6 for exactly what is and is not covered today |
 | `feat/metrics` | Custom counters, gauges and distributions | See "on metrics" below — the shape of this is a real decision, not just work |
 | `feat/sessions` | Session reporting, and crash-free users on top of it | Release health reports failure-free *requests* today. Crash-free rate is defined over sessions, and borrowing the name without them would be a number people compare wrongly |
 | `feat/teams` | Membership, roles, per-project access | Every signed-in user currently sees every project |
