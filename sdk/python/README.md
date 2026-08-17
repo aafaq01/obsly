@@ -100,6 +100,29 @@ The WSGI middleware times the response until its iterable is **closed**, not unt
 application callable returns. A streaming response finishes when the server finishes sending it,
 and measuring the call alone would report a slow download as instant.
 
+### Calling another service
+
+Nothing to configure. `init()` patches whichever HTTP client the process has already imported —
+`httpx`, `requests`, or `urllib` under both — so an outbound call becomes an `http.client` span
+and carries the trace to whatever it calls:
+
+```python
+import httpx
+import obsly
+
+obsly.init(dsn="...", traces_sample_rate=1.0)
+
+# inside a traced request: this call is a span, and payments continues the same trace
+httpx.Client().post("http://payments.internal/charge", json={"order": 42})
+```
+
+**Nothing is imported to patch it.** The SDK looks in `sys.modules` and instruments what is
+there; a service that does not use `requests` does not pay its import cost. Pass
+`propagate_trace=False` to `init()` to leave every client alone.
+
+The SDK never traces its own delivery — recognised by content type, so a collector behind any
+hostname is still not traced.
+
 ### Manual capture
 
 ```python

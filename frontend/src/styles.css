@@ -1267,6 +1267,101 @@ button:disabled,
   letter-spacing: 0.03em;
 }
 
+/* Which service this row belongs to. Only rendered when more than one took part — on a
+   single-service trace it would be the same word on every row. */
+.wf__service {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--series-1);
+  background: color-mix(in srgb, var(--series-1) 12%, transparent);
+  border-radius: 3px;
+  padding: 1px 5px;
+}
+
+/* A setting that needs its reason next to it, because the consequence is not guessable from
+   the label: it decides what other people can see. */
+.toggle {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 12px;
+  align-items: start;
+  padding: 14px 16px;
+  cursor: pointer;
+}
+
+.toggle input {
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  accent-color: var(--series-1);
+  cursor: pointer;
+}
+
+.toggle__title {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.toggle__note {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--ink-secondary);
+  max-width: 68ch;
+}
+
+/* Which service held the time, before anybody expands anything. */
+.services {
+  display: grid;
+  gap: 6px;
+  max-width: 720px;
+}
+
+.services__row {
+  display: grid;
+  grid-template-columns: 140px 1fr 72px;
+  align-items: center;
+  gap: 12px;
+}
+
+.services__name {
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.services__track {
+  height: 8px;
+  background: var(--grid);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.services__bar {
+  display: block;
+  height: 100%;
+  background: var(--series-1);
+  border-radius: 4px;
+}
+
+.services__ms {
+  font-size: 12px;
+  text-align: right;
+  color: var(--ink-secondary);
+}
+
+@media (max-width: 640px) {
+  .services__row {
+    grid-template-columns: 92px 1fr 60px;
+    gap: 8px;
+  }
+}
+
 .wf__desc {
   font-family: var(--mono);
   font-size: 12px;

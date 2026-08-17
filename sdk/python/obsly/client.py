@@ -283,6 +283,10 @@ def init(dsn: str | None = None, **options: Any) -> Client | None:
     """
     global _client
 
+    # Popped before the Client sees it: this is process-level patching of HTTP clients, not
+    # per-client state, and a second init() must not undo the first one's propagation.
+    propagate_trace = bool(options.pop("propagate_trace", True))
+
     dsn = dsn or os.environ.get("OBSLY_DSN", "")
     if not dsn:
         _sdk_log.info("obsly: no DSN configured, error reporting is disabled")
@@ -294,6 +298,13 @@ def init(dsn: str | None = None, **options: Any) -> Client | None:
     except dsn_module.DsnError as exc:
         _sdk_log.warning("obsly: disabled, %s", exc)
         _client = None
+
+    if _client is not None and propagate_trace:
+        # The other half of distributed tracing. Without it a trace stops at this service's
+        # edge, and every hop beyond it is an unrelated row in somebody else's project.
+        from obsly.integrations import outbound
+
+        outbound.instrument()
 
     return _client
 

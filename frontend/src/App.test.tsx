@@ -2874,3 +2874,190 @@ describe('Contextual setup prompts', () => {
     expect(await screen.findByText(/npm install obsly-browser/)).toBeInTheDocument()
   })
 })
+
+describe('Distributed traces', () => {
+  const NOW = new Date('2026-08-17T10:00:00Z').toISOString()
+  const LATER = new Date('2026-08-17T10:00:00.200Z').toISOString()
+
+  function node(overrides: Record<string, unknown>) {
+    return {
+      id: 't1',
+      project_id: 1,
+      project_name: 'Gateway',
+      name: '/checkout',
+      op: 'http.server',
+      status: 'ok',
+      start_timestamp: NOW,
+      timestamp: LATER,
+      duration_ms: 200,
+      span_id: '1'.repeat(16),
+      parent_span_id: '',
+      environment: 'production',
+      release: 'api@1',
+      span_count: 0,
+      spans: [],
+      depth: 0,
+      ...overrides,
+    }
+  }
+
+  const TRACE = {
+    id: 't1',
+    trace_id: 'a'.repeat(32),
+    span_id: '1'.repeat(16),
+    name: '/checkout',
+    op: 'http.server',
+    status: 'ok',
+    start_timestamp: NOW,
+    timestamp: LATER,
+    duration_ms: 200,
+    environment: 'production',
+    release: 'api@1',
+    span_count: 0,
+    spans: [],
+    errors: [],
+    logs: [],
+    transactions: [
+      node({}),
+      node({
+        id: 't2',
+        project_id: 2,
+        project_name: 'Payments',
+        name: '/charge',
+        span_id: '2'.repeat(16),
+        parent_span_id: '1'.repeat(16),
+        duration_ms: 900,
+        timestamp: new Date('2026-08-17T10:00:00.900Z').toISOString(),
+        depth: 1,
+      }),
+    ],
+    services: [
+      { project_id: 2, project_name: 'Payments', transactions: 1, duration_ms: 900 },
+      { project_id: 1, project_name: 'Gateway', transactions: 1, duration_ms: 200 },
+    ],
+  }
+
+  function mount(trace: unknown) {
+    mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/': { body: [PROJECT] },
+      '/traces/t1/': { body: trace },
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/projects/1/traces/t1']}>
+        <App />
+      </MemoryRouter>,
+    )
+  }
+
+  it('shows every service that served the request, not just the one that was opened', async () => {
+    // The waterfall used to stop at the first hop: a request that crossed four services was
+    // four unrelated rows in a list.
+    mount(TRACE)
+
+    // findAllByText: the name also appears in the breadcrumb and the title, which is correct
+    // and not what this test is about.
+    expect(await screen.findAllByText('/charge')).not.toHaveLength(0)
+    expect(screen.getAllByText('/checkout')).not.toHaveLength(0)
+  })
+
+  it('names which service each row belongs to', async () => {
+    mount(TRACE)
+
+    expect(await screen.findAllByText('Payments')).not.toHaveLength(0)
+    expect(screen.getAllByText('Gateway')).not.toHaveLength(0)
+  })
+
+  it('says which service held the time before anybody expands anything', async () => {
+    // The first question about a slow distributed request, answered at the top of the page.
+    mount(TRACE)
+
+    expect(await screen.findByText('Where the time went')).toBeInTheDocument()
+  })
+
+  it('times the chart against the whole request, not the first hop', async () => {
+    // The called service starts later and runs longer. Scaling to the caller's duration would
+    // push it off the end of the chart.
+    mount(TRACE)
+
+    expect(await screen.findAllByText('900ms')).not.toHaveLength(0)
+  })
+
+  it('does not clutter a single-service trace with service names', async () => {
+    // The common case. One project on every row is a column that says nothing.
+    mount({ ...TRACE, transactions: [node({})], services: [TRACE.services[1]] })
+
+    expect(await screen.findAllByText('/checkout')).not.toHaveLength(0)
+    expect(screen.queryByText('Where the time went')).not.toBeInTheDocument()
+    expect(screen.queryByText('Gateway')).not.toBeInTheDocument()
+  })
+
+  it('still renders a response that has no services in it', async () => {
+    // A cached bundle meeting an older response must not blank the page.
+    const { transactions, services, ...legacy } = TRACE
+    void transactions
+    void services
+    mount(legacy)
+
+    expect(await screen.findAllByText('/checkout')).not.toHaveLength(0)
+  })
+})
+
+describe('Trace sharing', () => {
+  const PROJECT_DETAIL = {
+    ...PROJECT,
+    trace_sharing: false,
+    keys: [
+      {
+        id: 1,
+        label: 'Default',
+        public_key: 'abc',
+        dsn: 'http://abc@localhost:8081/1',
+        is_active: true,
+        created_at: new Date().toISOString(),
+      },
+    ],
+  }
+
+  function mount(project: unknown) {
+    const fetchMock = mockApi({
+      '/me/': { body: { authenticated: true, username: 'admin' } },
+      '/projects/': { body: [PROJECT] },
+      '/projects/1/': { body: project },
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/projects/1/settings']}>
+        <App />
+      </MemoryRouter>,
+    )
+    return fetchMock
+  }
+
+  it('is off until somebody turns it on', async () => {
+    // Joining is a disclosure. A project appearing in another team's waterfall without anyone
+    // choosing it would be a decision nobody made.
+    mount(PROJECT_DETAIL)
+
+    const toggle = await screen.findByRole('checkbox')
+    expect(toggle).not.toBeChecked()
+  })
+
+  it('says what turning it on actually does', async () => {
+    mount(PROJECT_DETAIL)
+
+    expect(await screen.findByText(/never pulled into anyone/)).toBeInTheDocument()
+  })
+
+  it('turns it on', async () => {
+    const fetchMock = mount(PROJECT_DETAIL)
+
+    await userEvent.click(await screen.findByRole('checkbox'))
+
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find((c) => c[1]?.method === 'PATCH')
+      expect(call?.[1]?.body as string).toContain('trace_sharing')
+    })
+  })
+})
