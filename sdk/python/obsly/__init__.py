@@ -23,7 +23,7 @@ from obsly.integrations import sqlalchemy as sqlalchemy_integration
 from obsly.logs import ObslyLogHandler
 from obsly.tracing import get_current_span, start_span
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 
 __all__ = [
     "Client",

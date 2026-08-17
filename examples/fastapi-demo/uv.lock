@@ -90,11 +90,11 @@ wheels = [
 
 [[package]]
 name = "obsly"
-version = "0.3.0"
+version = "0.4.0"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/66/41/805220b0b73ae346e8ca42beae010b8e3267535eba2e30c50d7fb0dbb60e/obsly-0.3.0.tar.gz", hash = "sha256:6849151ca282239d6249a68764a1ee6a2d5b9b6a117eb92af9b6dbb3faed7c1e", size = 36315, upload-time = "2026-08-17T05:53:51.049Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/3a/92/60c0e5278551b3323ea81cb9ce13babec19d1abe9601e9b038a8b4ee7fc4/obsly-0.4.0.tar.gz", hash = "sha256:864432bdce82a99a34b7d239bff5107d836a4d793a6596827a675a0c150c975c", size = 40469, upload-time = "2026-08-17T09:11:41.964Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/0f/4f/d8dbcc761f942b6901fcb316f5cd374e2e6def3ccd02c630b66d1dd5f381/obsly-0.3.0-py3-none-any.whl", hash = "sha256:168666da9c95b602bee043cc25ce30e25076d4f22fd3b6e827cddedf0c6c6277", size = 32252, upload-time = "2026-08-17T05:53:49.915Z" },
+    { url = "https://files.pythonhosted.org/packages/1d/a8/83fc7e867b4a20901c4f2aa197f5fbc816cac6240a1b29a349061ba94183/obsly-0.4.0-py3-none-any.whl", hash = "sha256:9f173c167e16424fec6a6cf5556ac5bc1feb0d929aa3fee042de672623dcd1e7", size = 35766, upload-time = "2026-08-17T09:11:40.414Z" },
 ]
 
 [[package]]
@@ -110,7 +110,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = ">=0.115" },
-    { name = "obsly", specifier = ">=0.3.0" },
+    { name = "obsly", specifier = ">=0.4.0" },
     { name = "uvicorn", specifier = ">=0.32" },
 ]
 
