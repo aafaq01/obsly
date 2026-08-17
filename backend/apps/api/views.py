@@ -21,6 +21,7 @@ from rest_framework.views import APIView
 
 from apps.alerts.delivery import send_now
 from apps.alerts.models import AlertFire, AlertRule
+from apps.api import distributed
 from apps.api.dashboard import overview
 from apps.api.database import summary as database_summary
 from apps.api.flags import issues_touching
@@ -48,6 +49,7 @@ from apps.api.serializers import (
     ProjectKeySerializer,
     ProjectSerializer,
     TraceDetailSerializer,
+    TraceNodeSerializer,
     TransactionSerializer,
 )
 from apps.api.timewindow import PERIODS, Window, resolve
@@ -114,10 +116,16 @@ class ProjectListView(generics.ListCreateAPIView[Project]):
         )
 
 
-class ProjectDetailView(generics.RetrieveAPIView[Project]):
-    """A project and its ingest keys — everything needed to wire an SDK up, in one response."""
+class ProjectDetailView(generics.RetrieveUpdateAPIView[Project]):
+    """A project and its ingest keys — everything needed to wire an SDK up, in one response.
+
+    PATCH exists for the settings that are a decision rather than an identity: trace sharing
+    today. Renaming is deliberately not offered here yet; the slug is in every DSN somebody has
+    already pasted into a deployment.
+    """
 
     serializer_class = ProjectDetailSerializer
+    http_method_names = ["get", "patch"]
 
     def get_queryset(self) -> QuerySet[Project]:
         return (
@@ -405,22 +413,37 @@ class TraceDetailView(generics.RetrieveAPIView[Transaction]):
     def retrieve(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         trace = self.get_object()
 
+        # Which projects this trace may be read across. Itself always; others only where both
+        # ends have turned sharing on.
+        projects = distributed.joinable_project_ids(trace.project)
+        nodes = distributed.build_tree(distributed.transactions_in_trace(trace))
+
         # Errors recorded inside this request. This is the correlation: same trace_id, no
-        # timestamp guessing, no "these probably happened together".
+        # timestamp guessing, no "these probably happened together". Across services too — an
+        # error thrown three hops down belongs to the request that caused it.
         errors = (
-            Event.objects.filter(project_id=trace.project_id, trace_id=trace.trace_id)
-            .select_related("issue")
+            Event.objects.filter(project_id__in=projects, trace_id=trace.trace_id)
+            .select_related("issue", "project")
             .order_by("timestamp")[:50]
         )
 
-        # Everything the application said during this request, in order.
-        logs = LogRecord.objects.filter(
-            project_id=trace.project_id, trace_id=trace.trace_id
-        ).order_by("timestamp")[:200]
+        # Everything every service said during this request, in order.
+        logs = (
+            LogRecord.objects.filter(project_id__in=projects, trace_id=trace.trace_id)
+            .select_related("project")
+            .order_by("timestamp")[:200]
+        )
 
         return Response(
             {
                 **self.get_serializer(trace).data,
+                # The whole request, not just the hop that was opened. One entry when nothing
+                # else took part, which is the common case and reads the same as it always did.
+                # The ignore is the stubs, not the code: with many=True DRF builds a
+                # ListSerializer whose instance is a list, which the generic parameter cannot
+                # express.
+                "transactions": TraceNodeSerializer(nodes, many=True).data,  # type: ignore[arg-type]
+                "services": distributed.services_in(nodes),
                 "errors": CorrelatedErrorSerializer(errors, many=True).data,
                 "logs": LogRecordSerializer(logs, many=True).data,
             }

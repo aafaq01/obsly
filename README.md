@@ -109,6 +109,20 @@ That is the point of the project stated in four lines: the paint the reader wait
 request it caused, and the query that made it slow, joined by ids rather than by comparing
 timestamps across three tools.
 
+**Across services, too.** One project per microservice and per microfrontend, each with its own
+DSN — and with trace sharing turned on in their settings, one waterfall holds all of them:
+
+```
+Demo App · http.server /checkout/{id}               122ms
+    http.client POST http://payments/charge         122ms
+    Payments · http.server /charge                  120ms
+        db.query UPDATE ledger SET balance = ...    120ms
+```
+
+The outbound call there is ordinary `urllib`. The SDK adds the header, the next service
+continues the trace, and the page reads the link back out. Sharing is off until each project
+turns it on, because joining is a disclosure rather than a default.
+
 ## Development
 
 For hot reload, run the services directly. Requires Python 3.12+, Node 22+, and

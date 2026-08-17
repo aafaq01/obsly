@@ -67,6 +67,43 @@ request is queued, so the failure is unobservable and no fallback behind that re
 run. `keepalive` outlives the document the same way, takes headers, and lets credentials be
 turned off.
 
+## Microfrontends
+
+`init()` returns a client, and several can run on one page — each with its own DSN, so each
+team's errors land in their own project:
+
+```ts
+// shell
+const shell = init({ dsn: SHELL_DSN })
+
+// checkout microfrontend, owned by another team, reporting to another project
+const checkout = init({ dsn: CHECKOUT_DSN })
+checkout.setFlag('new-payment-form', true)
+checkout.captureException(error, { step: 'payment' })
+```
+
+They share **one trace**: the page view is one thing the reader waited for, and giving each
+bundle its own trace would split it into unrelated waterfalls — the exact problem distributed
+tracing exists to solve, reproduced inside a tab. The others' transactions hang off the shell's,
+so a combined trace reads shell first, then what it composed.
+
+Two things belong to the first client, and it is worth knowing which: **network spans**, because
+nothing about a `fetch` says which bundle called it, and **uncaught errors**, because
+`window.onerror` carries nothing that identifies one either. Errors a microfrontend reports by
+name — `checkout.captureException(...)` — always go to its own project.
+
+## Other origins
+
+Same-origin requests are traced automatically. A microservice estate is several origins, so name
+them:
+
+```ts
+init({ dsn, tracePropagationTargets: ['https://api.example.com'] })
+```
+
+The receiving server must allow `obsly-trace` in its CORS `Access-Control-Allow-Headers`, or the
+browser will refuse the request that used to work.
+
 ## Options
 
 | Option              | Default                 | What it does                                                                                                                                                     |

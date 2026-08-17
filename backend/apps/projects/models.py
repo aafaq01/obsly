@@ -52,6 +52,18 @@ class Project(TimestampedModel):
     name = models.CharField(max_length=200)
     slug = models.SlugField(max_length=100)
 
+    # One project per service is the shape a microservice estate wants: its own DSN, its own
+    # issue stream, its own quota later. But a request that crosses four of them is still one
+    # request, and a waterfall that stops at the first hop describes nothing.
+    #
+    # Opt-in, and off by default, because joining is a disclosure: it lets a trace opened in
+    # one project show rows belonging to another. A shared instance where every project is
+    # visible from every other by default would be a decision nobody made.
+    trace_sharing = models.BooleanField(
+        default=False,
+        help_text=("Combine traces with other projects in this organization that also have it on."),
+    )
+
     class Meta:
         ordering = ["name"]
         constraints = [

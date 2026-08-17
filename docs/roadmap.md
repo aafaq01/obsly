@@ -55,6 +55,7 @@ least able to answer.
 | 41 | `feat/contextual-setup` | An empty layer page offers to instrument its own tier, and says what the other half would join |
 | 42 | `feat/journey` | [user-journey.md](user-journey.md); framework coverage stated in the product; no organization question when there is one organization |
 | 43 | `feat/sdk-frameworks` | WSGI, Flask and Django integrations; XHR spans and per-route SPA transactions in the browser |
+| 44 | `feat/distributed-traces` | One waterfall across projects; outbound propagation; several browser clients on one page |
 
 ## Coverage against the reference
 
@@ -64,7 +65,7 @@ stand, so the gap is a fact rather than a feeling.
 | Section | State |
 |---|---|
 | FR-ERR, FR-GRP — errors, grouping, lifecycle | Built |
-| FR-TRC — distributed tracing, browser to database | Built |
+| FR-TRC — distributed tracing, browser to database, and across services | Built |
 | FR-PERF — N+1 and slow-query detection | Built |
 | FR-INS — frontend, backend, database, cache | Built |
 | FR-LOG — structured logs | Built |
@@ -88,6 +89,7 @@ already run into.
 
 | Branch | Delivers | Why it matters |
 |---|---|---|
+| `perf/sdk-delivery` | Batched envelopes, a small worker pool, and dropped events surfaced rather than counted in silence | One POST per event through one thread ceilings at a few hundred a second. Past that the queue fills and events are dropped — the service stays fast and the dashboard quietly stops being true, which is the worse failure. Distributed tracing multiplies the volume, so this follows it immediately |
 | `feat/metrics` | Custom counters, gauges and distributions | See "on metrics" below — the shape of this is a real decision, not just work |
 | `feat/sessions` | Session reporting, and crash-free users on top of it | Release health reports failure-free *requests* today. Crash-free rate is defined over sessions, and borrowing the name without them would be a number people compare wrongly |
 | `feat/teams` | Membership, roles, per-project access | Every signed-in user currently sees every project |

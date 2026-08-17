@@ -19,6 +19,18 @@ export interface Options {
   tracesSampleRate?: number
   /** Which requests carry a trace header. Same-origin only by default — see tracing.ts. */
   shouldTrace?: (url: string) => boolean
+  /**
+   * Origins allowed to receive the trace header, beyond this one.
+   *
+   * A microservice estate is several origins by definition, and the same-origin default stops
+   * the trace at the first hop. Each entry matches the start of the request URL, so
+   * `https://api.example.com` covers everything under it.
+   *
+   * Setting this is a decision about the *other* end: the receiving server must allow
+   * `obsly-trace` in its CORS `Access-Control-Allow-Headers`, or the browser refuses the
+   * request that used to work.
+   */
+  tracePropagationTargets?: string[]
   /** Turn a URL into the route it belongs to, so `/orders/42` and `/orders/43` aggregate. */
   transactionName?: (url: string) => string
   maxSpans?: number
@@ -31,33 +43,49 @@ export interface Options {
   trackRouteChanges?: boolean
 }
 
-/** One measured unit of what the reader waited for: the page load, or one route change. */
-interface Transaction {
-  op: 'pageload' | 'navigation'
-  name: string
-  traceId: string
-  spanId: string
-  sampled: boolean
-  spans: Span[]
-  /** Vitals belong to the page load. A route change has no First Contentful Paint. */
-  measurements: Measurements
-  /** Milliseconds since timeOrigin — 0 for the page load, the clock reading for a route change. */
-  startedAtMs: number
-  startedAt: string
-  url: string
-  sent: boolean
-  /** Set while waiting for the route to go quiet — see scheduleIdleFinish. */
-  idleTimer: ReturnType<typeof setTimeout> | null
-  deadline: ReturnType<typeof setTimeout> | null
+type Resolved = Required<Omit<Options, 'dsn'>>
+
+/** What one microfrontend gets back, so it can report to its own project by name. */
+export interface ObslyClient {
+  captureException(error: unknown, context?: Record<string, unknown>): void
+  setFlag(name: string, result: boolean): void
+  close(): void
 }
 
 interface Client {
   dsn: Dsn
-  options: Required<Omit<Options, 'dsn'>>
-  current: Transaction
+  options: Resolved
   /** Evaluated flags in evaluation order — a log of what had already been decided. */
   flags: Map<string, boolean>
-  teardown: (() => void)[]
+  /** Its own span for the current unit, so each project gets its own transaction row. */
+  spanId: string
+  sent: boolean
+}
+
+/**
+ * The unit every client on this page is reporting about: the page load, or one route change.
+ *
+ * Shared deliberately. Two microfrontends with two projects are still one thing the reader is
+ * waiting for, and giving them separate traces would split one page view into two unrelated
+ * waterfalls — which is the problem this exists to solve, reproduced inside a single tab.
+ */
+interface Page {
+  op: 'pageload' | 'navigation'
+  name: string
+  url: string
+  traceId: string
+  /** The page's own span: what every client's transaction hangs off, and what outbound
+   *  requests name as their parent. */
+  rootSpanId: string
+  sampled: boolean
+  /** Network spans. They belong to the page rather than to any one microfrontend, because
+   *  nothing about a fetch says which bundle called it. */
+  spans: Span[]
+  measurements: Measurements
+  startedAtMs: number
+  startedAt: string
+  idleTimer: ReturnType<typeof setTimeout> | null
+  deadline: ReturnType<typeof setTimeout> | null
 }
 
 const MAX_FLAGS = 100
@@ -75,71 +103,65 @@ const IDLE_MS = 1000
 /** However busy the page stays, a navigation is not still happening a minute later. */
 const MAX_NAVIGATION_MS = 30_000
 
-let client: Client | null = null
+/**
+ * Every client on this page, in the order they initialised.
+ *
+ * The first one owns the page: its options govern instrumentation, the network spans and the
+ * vitals are reported under it, and uncaught errors — which carry nothing that says which
+ * bundle they came from — are attributed to it. The rest report their own transactions,
+ * their own flags, and the errors they hand over by name.
+ */
+const clients: Client[] = []
+let page: Page | null = null
+let teardown: (() => void)[] = []
 
-/** Every id in one page load shares this, so an error and its request land in one trace. */
-export function init(options: Options): void {
-  if (client) close()
-
-  const resolved: Required<Omit<Options, 'dsn'>> = {
+/**
+ * Start reporting.
+ *
+ * Called once by an ordinary page. Called once per microfrontend by a composed one — each with
+ * its own DSN, so each team's errors land in their own project, while the page they share
+ * stays one trace.
+ */
+export function init(options: Options): ObslyClient {
+  const resolved: Resolved = {
     environment: options.environment ?? 'production',
     release: options.release ?? '',
     tracesSampleRate: options.tracesSampleRate ?? 1,
-    shouldTrace: options.shouldTrace ?? sameOrigin,
+    shouldTrace: options.shouldTrace ?? defaultShouldTrace(options.tracePropagationTargets ?? []),
+    tracePropagationTargets: options.tracePropagationTargets ?? [],
     transactionName: options.transactionName ?? defaultRoute,
     maxSpans: options.maxSpans ?? 100,
     trackRouteChanges: options.trackRouteChanges ?? true,
   }
 
-  const sampled = Math.random() < resolved.tracesSampleRate
-
-  client = {
+  const client: Client = {
     dsn: parseDsn(options.dsn),
     options: resolved,
-    current: newTransaction('pageload', location.href, resolved, sampled, 0),
     flags: new Map(),
-    teardown: [],
+    spanId: hex(8),
+    sent: false,
   }
 
-  const active = client
-  const pageload = active.current
+  const first = clients.length === 0
+  clients.push(client)
 
-  active.teardown.push(
-    collectVitals((measurements) => {
-      // The page load's, always — a route change three screens later has no Largest
-      // Contentful Paint, and attaching one there would put a number in a column that means
-      // something else.
-      pageload.measurements = measurements
-    }),
-  )
-
-  const context = (): TraceContext => ({
-    traceId: active.current.traceId,
-    sampled: active.current.sampled,
-  })
-  const onSpan = (span: Span) => {
-    const transaction = active.current
-    // Bounded. A page that fires a request per keystroke would otherwise grow this array
-    // until the tab runs out of memory — the SDK must not be the leak.
-    if (transaction.spans.length < resolved.maxSpans) transaction.spans.push(span)
-    // Still busy, so the route has not settled yet.
-    if (transaction.op === 'navigation') scheduleIdleFinish(active, transaction)
-  }
-
-  active.teardown.push(instrumentFetch({ context, shouldTrace: resolved.shouldTrace, onSpan }))
-  active.teardown.push(instrumentXhr({ context, shouldTrace: resolved.shouldTrace, onSpan }))
-
-  if (resolved.trackRouteChanges) {
-    active.teardown.push(
-      instrumentHistory((url) => {
-        if (samePath(url, active.current.url)) return
-        startNavigation(active, url)
-      }),
+  if (first) {
+    page = newPage(
+      'pageload',
+      location.href,
+      resolved,
+      Math.random() < resolved.tracesSampleRate,
+      0,
     )
+    client.spanId = page.rootSpanId
+    installInstrumentation(resolved)
   }
 
-  installErrorHandlers(active)
-  installPageloadReporter(active)
+  return {
+    captureException: (error, context) => report(client, error, context ?? {}),
+    setFlag: (name, result) => setFlagOn(client, name, result),
+    close: () => closeOne(client),
+  }
 }
 
 /**
@@ -148,14 +170,43 @@ export function init(options: Options): void {
  * Called from wherever the decision is made, so the log reflects what the code actually asked
  * for rather than what the flag service says now. Those differ exactly when it matters: during
  * a rollout.
- *
- * A Map, so re-evaluating moves the flag to the end — the last decision is the one the code
- * acted on. Bounded, because a flag name built from a user id would otherwise grow without
- * limit in a long-lived tab.
  */
 export function setFlag(name: string, result: boolean): void {
-  if (!client || !name || typeof result !== 'boolean') return
+  if (clients[0]) setFlagOn(clients[0], name, result)
+}
 
+/** Report an error the page caught itself, to the client that owns the page. */
+export function captureException(error: unknown, context: Record<string, unknown> = {}): void {
+  if (clients[0]) report(clients[0], error, context)
+}
+
+/** Stop every client on this page and put the patched globals back. */
+export function close(): void {
+  if (page) clearTimers(page)
+  for (const undo of teardown) undo()
+  teardown = []
+  clients.length = 0
+  page = null
+}
+
+function closeOne(client: Client): void {
+  const index = clients.indexOf(client)
+  if (index === -1) return
+  // The last one out turns the instrumentation off. Removing the page's owner while another
+  // microfrontend is still reporting would leave that one with no fetch spans.
+  if (clients.length === 1) {
+    close()
+    return
+  }
+  clients.splice(index, 1)
+}
+
+function setFlagOn(client: Client, name: string, result: boolean): void {
+  if (!name || typeof result !== 'boolean') return
+
+  // A Map, so re-evaluating moves the flag to the end — the last decision is the one the code
+  // acted on. Bounded, because a flag name built from a user id would otherwise grow without
+  // limit in a long-lived tab.
   client.flags.delete(name)
   if (client.flags.size >= MAX_FLAGS) {
     // Oldest out: dropping the newest would lose the evaluation closest to the failure.
@@ -164,12 +215,10 @@ export function setFlag(name: string, result: boolean): void {
   client.flags.set(name.slice(0, 200), result)
 }
 
-/** Report an error the page caught itself. */
-export function captureException(error: unknown, context: Record<string, unknown> = {}): void {
-  if (!client) return
+function report(client: Client, error: unknown, context: Record<string, unknown>): void {
+  if (!page) return
 
   const value = error instanceof Error ? error : new Error(String(error))
-  const transaction = client.current
   sendItems(client, [
     {
       type: 'event',
@@ -180,10 +229,10 @@ export function captureException(error: unknown, context: Record<string, unknown
         platform: 'javascript',
         environment: client.options.environment,
         release: client.options.release,
-        // The two ids that make this error findable from the request it happened in. Read
-        // from the current transaction, so an error on the fourth route of a session belongs
-        // to that route rather than to the page load an hour ago.
-        contexts: { trace: { trace_id: transaction.traceId, span_id: transaction.spanId } },
+        // The two ids that make this error findable from the request it happened in. Read from
+        // the current unit, so an error on the fourth route of a session belongs to that route
+        // rather than to the page load an hour ago.
+        contexts: { trace: { trace_id: page.traceId, span_id: client.spanId } },
         exception: {
           values: [
             {
@@ -195,34 +244,28 @@ export function captureException(error: unknown, context: Record<string, unknown
         },
         request: { url: location.href },
         flags: Object.fromEntries(client.flags),
-        tags: { url: location.pathname, transaction: transaction.name, ...stringTags(context) },
+        tags: { url: location.pathname, transaction: page.name, ...stringTags(context) },
         extra: context,
       },
     },
   ])
 }
 
-export function close(): void {
-  if (!client) return
-  clearTimers(client.current)
-  for (const undo of client.teardown) undo()
-  client = null
-}
-
-function newTransaction(
+function newPage(
   op: 'pageload' | 'navigation',
   url: string,
-  options: Required<Omit<Options, 'dsn'>>,
+  options: Resolved,
   sampled: boolean,
   startedAtMs: number,
-): Transaction {
+): Page {
   return {
     op,
     name: options.transactionName(url),
+    url,
     // A route change starts its own trace. It is a new thing the reader asked for, and hanging
     // an hour of navigations off one trace id would produce a waterfall nobody can read.
     traceId: hex(16),
-    spanId: hex(8),
+    rootSpanId: hex(8),
     sampled,
     spans: [],
     measurements: {},
@@ -230,82 +273,141 @@ function newTransaction(
     // Derived from timeOrigin rather than Date.now(): a page open across a clock change would
     // otherwise report a transaction that started after it ended.
     startedAt: new Date(performance.timeOrigin + startedAtMs).toISOString(),
-    url,
-    sent: false,
     idleTimer: null,
     deadline: null,
   }
 }
 
-function startNavigation(active: Client, url: string): void {
-  report(active, active.current)
-
-  const next = newTransaction(
-    'navigation',
-    url,
-    active.options,
-    active.current.sampled,
-    performance.now(),
+function installInstrumentation(options: Resolved): void {
+  teardown.push(
+    collectVitals((measurements) => {
+      // The page load's, always — a route change three screens later has no Largest
+      // Contentful Paint, and attaching one there would put a number in a column that means
+      // something else.
+      if (page?.op === 'pageload') page.measurements = measurements
+    }),
   )
-  active.current = next
-  scheduleIdleFinish(active, next)
-  next.deadline = setTimeout(() => report(active, next), MAX_NAVIGATION_MS)
+
+  const context = (): TraceContext => ({
+    traceId: page?.traceId ?? '',
+    // The page's root span, not any client's: it is what a downstream service names as the
+    // parent of its own transaction, and it exists whichever microfrontend made the call.
+    sampled: page?.sampled ?? false,
+  })
+  const onSpan = (span: Span) => {
+    if (!page) return
+    // Bounded. A page that fires a request per keystroke would otherwise grow this array until
+    // the tab runs out of memory — the SDK must not be the leak.
+    if (page.spans.length < options.maxSpans) page.spans.push(span)
+    // Still busy, so the route has not settled yet.
+    if (page.op === 'navigation') scheduleIdleFinish(page)
+  }
+
+  teardown.push(instrumentFetch({ context, shouldTrace: options.shouldTrace, onSpan }))
+  teardown.push(instrumentXhr({ context, shouldTrace: options.shouldTrace, onSpan }))
+
+  if (options.trackRouteChanges) {
+    teardown.push(
+      instrumentHistory((url) => {
+        if (!page || samePath(url, page.url)) return
+        startNavigation(url)
+      }),
+    )
+  }
+
+  installErrorHandlers()
+  installPageReporter()
+}
+
+function startNavigation(url: string): void {
+  if (!page) return
+  const options = clients[0]?.options
+  if (!options) return
+
+  reportPage()
+  page = newPage('navigation', url, options, page.sampled, performance.now())
+
+  // Every client gets a fresh span for the new unit; the page's owner keeps the root, so the
+  // rest still indent under it.
+  for (const [index, client] of clients.entries()) {
+    client.spanId = index === 0 ? page.rootSpanId : hex(8)
+    client.sent = false
+  }
+
+  scheduleIdleFinish(page)
+  const started = page
+  page.deadline = setTimeout(() => {
+    if (page === started) reportPage()
+  }, MAX_NAVIGATION_MS)
 }
 
 /** Report the route once nothing has been requested for a moment. */
-function scheduleIdleFinish(active: Client, transaction: Transaction): void {
-  if (transaction.idleTimer) clearTimeout(transaction.idleTimer)
-  transaction.idleTimer = setTimeout(() => report(active, transaction), IDLE_MS)
+function scheduleIdleFinish(current: Page): void {
+  if (current.idleTimer) clearTimeout(current.idleTimer)
+  current.idleTimer = setTimeout(() => {
+    if (page === current) reportPage()
+  }, IDLE_MS)
 }
 
-function clearTimers(transaction: Transaction): void {
-  if (transaction.idleTimer) clearTimeout(transaction.idleTimer)
-  if (transaction.deadline) clearTimeout(transaction.deadline)
-  transaction.idleTimer = null
-  transaction.deadline = null
+function clearTimers(current: Page): void {
+  if (current.idleTimer) clearTimeout(current.idleTimer)
+  if (current.deadline) clearTimeout(current.deadline)
+  current.idleTimer = null
+  current.deadline = null
 }
 
-function report(active: Client, transaction: Transaction): void {
-  // Once. A navigation can reach its idle timer and its deadline and a page hide, and a
-  // browser that fires two of them would otherwise count one visit twice.
-  if (transaction.sent || !transaction.sampled) {
-    transaction.sent = true
-    clearTimers(transaction)
-    return
-  }
-  transaction.sent = true
-  clearTimers(transaction)
+/**
+ * One transaction per client, all on the same trace.
+ *
+ * The page's owner reports the network spans and the vitals; the others report their own row,
+ * parented by the owner's span. So a page composed of three microfrontends is three rows in
+ * three projects and one waterfall.
+ */
+function reportPage(): void {
+  if (!page) return
+  const current = page
+  clearTimers(current)
+  if (!current.sampled) return
 
-  sendItems(active, [
-    {
-      type: 'transaction',
-      payload: {
-        event_id: hex(16),
-        transaction: transaction.name,
-        // The op the vitals aggregate filters on: a backend request has no layout shift, and
-        // mixing the two populations produces a number describing neither.
-        op: transaction.op,
-        start_timestamp: transaction.startedAt,
-        timestamp: new Date().toISOString(),
-        environment: active.options.environment,
-        release: active.options.release,
-        contexts: {
-          trace: {
-            trace_id: transaction.traceId,
-            span_id: transaction.spanId,
-            op: transaction.op,
-            status: 'ok',
+  for (const [index, client] of clients.entries()) {
+    // Once. A navigation can reach its idle timer, its deadline and a page hide, and a browser
+    // firing two of them would count one visit as two.
+    if (client.sent) continue
+    client.sent = true
+
+    const owner = index === 0
+    sendItems(client, [
+      {
+        type: 'transaction',
+        payload: {
+          event_id: hex(16),
+          transaction: current.name,
+          // The op the vitals aggregate filters on: a backend request has no layout shift, and
+          // mixing the two populations produces a number describing neither.
+          op: current.op,
+          start_timestamp: current.startedAt,
+          timestamp: new Date().toISOString(),
+          environment: client.options.environment,
+          release: client.options.release,
+          contexts: {
+            trace: {
+              trace_id: current.traceId,
+              span_id: client.spanId,
+              parent_span_id: owner ? '' : current.rootSpanId,
+              op: current.op,
+              status: 'ok',
+            },
           },
+          measurements: owner ? current.measurements : {},
+          spans: owner ? current.spans : [],
+          request: { url: current.url },
         },
-        measurements: transaction.measurements,
-        spans: transaction.spans,
-        request: { url: transaction.url },
       },
-    },
-  ])
+    ])
+  }
 }
 
-function installErrorHandlers(active: Client): void {
+function installErrorHandlers(): void {
   const onError = (event: ErrorEvent) => {
     // event.error carries the stack; event.message alone is all a cross-origin script gives,
     // and reporting that as an error with no frames is still better than silence.
@@ -317,14 +419,14 @@ function installErrorHandlers(active: Client): void {
 
   addEventListener('error', onError)
   addEventListener('unhandledrejection', onRejection)
-  active.teardown.push(() => {
+  teardown.push(() => {
     removeEventListener('error', onError)
     removeEventListener('unhandledrejection', onRejection)
   })
 }
 
-function installPageloadReporter(active: Client): void {
-  const onHide = () => report(active, active.current)
+function installPageReporter(): void {
+  const onHide = () => reportPage()
 
   // visibilitychange, not unload: on mobile a tab is often frozen without ever firing unload,
   // and those page loads would simply never be measured.
@@ -333,25 +435,36 @@ function installPageloadReporter(active: Client): void {
   }
   addEventListener('visibilitychange', onHidden)
   addEventListener('pagehide', onHide)
-  active.teardown.push(() => {
+  teardown.push(() => {
     removeEventListener('visibilitychange', onHidden)
     removeEventListener('pagehide', onHide)
   })
 }
 
-function sendItems(active: Client, items: Item[]): void {
+function sendItems(client: Client, items: Item[]): void {
   try {
-    send(active.dsn, buildEnvelope(hex(16), items))
+    send(client.dsn, buildEnvelope(hex(16), items))
   } catch {
     // Reporting must never throw into the host page.
   }
 }
 
-function sameOrigin(url: string): boolean {
-  try {
-    return new URL(url, location.href).origin === location.origin
-  } catch {
-    return false
+/**
+ * Which requests carry the trace header.
+ *
+ * Same origin always, because that is this page's own backend. Anything else only when it was
+ * named: adding a header to a third party's endpoint turns a simple request into a preflighted
+ * one, and breaking somebody's payment provider to draw a nicer waterfall is the wrong trade.
+ */
+function defaultShouldTrace(targets: string[]): (url: string) => boolean {
+  return (url: string) => {
+    try {
+      const absolute = new URL(url, location.href)
+      if (absolute.origin === location.origin) return true
+      return targets.some((target) => absolute.href.startsWith(target))
+    } catch {
+      return false
+    }
   }
 }
 

@@ -35,6 +35,13 @@ export function ProjectSettings() {
     )
   }
 
+  async function toggleTraceSharing(next: boolean) {
+    const updated = await api.setTraceSharing(id, next)
+    setProject((current) =>
+      current ? { ...current, trace_sharing: updated.trace_sharing } : current,
+    )
+  }
+
   const live = project.keys.find((key) => key.is_active)
 
   return (
@@ -66,6 +73,33 @@ export function ProjectSettings() {
               This project cannot receive events until a key is issued below.
             </Notice>
           )}
+        </div>
+      </div>
+
+      <div className="section">
+        <h2 className="section__title">Distributed tracing</h2>
+        <div className="card card--tight">
+          {/* Off until somebody decides otherwise: joining is a disclosure, and a project that
+              appeared in another team's waterfall without anyone choosing it would be a
+              decision nobody made. */}
+          <label className="toggle">
+            <input
+              type="checkbox"
+              checked={project.trace_sharing}
+              onChange={(event) => void toggleTraceSharing(event.target.checked)}
+            />
+            <span>
+              <span className="toggle__title">
+                Combine traces with other projects in {project.organization}
+              </span>
+              <span className="toggle__note">
+                One request often crosses several services, and each has its own project. With this
+                on, a trace opened here shows every hop from projects that have also turned it on —
+                and this project&rsquo;s hops appear in theirs. With it off, this project is never
+                pulled into anyone else&rsquo;s waterfall.
+              </span>
+            </span>
+          </label>
         </div>
       </div>
 

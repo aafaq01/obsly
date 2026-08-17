@@ -124,7 +124,8 @@ is also not everything.
 | **Django** | `obsly.integrations.django.ObslyMiddleware`, first in `MIDDLEWARE`. One middleware covers both its WSGI and ASGI deployments, names transactions by the resolved route, and takes exceptions from `process_exception` — before Django turns them into a 500. |
 | **Automatic query spans** | SQLAlchemy, via its event hooks. |
 | **Route naming** | The framework's own name where there is one. Where there is not — a bare ASGI or WSGI app — the path has its ids collapsed (`/orders/42` → `/orders/{id}`), because the alternative is one row per id ever requested and a p95 over a population of one. |
-| **Not yet** | Redis and other cache clients have no automatic spans (the Cache page is fed by manually-named spans), and neither do outbound calls through `requests` or `httpx`. |
+| **Outbound calls** | `httpx`, `requests` and `urllib` are patched at `init()` — each call becomes an `http.client` span and carries the trace to whatever it calls. Nothing is imported to patch it: whatever the process already imported is instrumented, and the rest is left alone. `propagate_trace=False` opts out. |
+| **Not yet** | Redis and other cache clients have no automatic spans — the Cache page is fed by manually-named spans. |
 
 ### Browser — `obsly-browser` on npm
 
@@ -133,6 +134,8 @@ is also not everything.
 | **Framework** | None required. It hooks the browser, not a framework — React, Vue, Svelte, or a plain HTML page are all the same `init()` call. There is no `obsly-react` and there does not need to be. |
 | **Collects** | `window.onerror` and `unhandledrejection`, Core Web Vitals (LCP, CLS, INP, FCP, TTFB) via `PerformanceObserver`, and spans for both `fetch()` **and `XMLHttpRequest`** — so axios, which speaks XHR in the browser, is covered. |
 | **Route changes** | A single-page app reports a `navigation` transaction per route change, with its own trace. It ends when the route stops fetching (one second idle, thirty second cap), because a navigation has no load event: ending it at the URL change would measure nothing, and ending it when the reader leaves would measure how long they read. A query-string change is not a navigation. Turn it off with `trackRouteChanges: false` on a server-rendered site. |
+| **Microfrontends** | `init()` returns a client, and several may run on one page — each with its own DSN, so each team's errors land in their own project. They share the page's trace, and the others' transactions hang off the shell's, so one page view is one waterfall rather than several. Network spans and uncaught errors belong to the first client: nothing about a `fetch` or a `window.onerror` says which bundle it came from, and a stated rule beats a guess. |
+| **Other origins** | `tracePropagationTargets: ['https://api.example.com']`. Same-origin is always traced; anything else only when named, because adding a header to a third party's endpoint turns a simple request into a preflighted one. The receiving server must allow `obsly-trace` in its CORS `Access-Control-Allow-Headers`. |
 | **Not yet** | **No source maps**, so frames are minified: `a.js:1:48291` names no line anyone can open. Web Vitals attach to the page load only — a route change has no Largest Contentful Paint — and those that finalise late (CLS, INP) are lost if the reader navigates first. |
 
 ### Node.js
@@ -143,6 +146,38 @@ format directly, but that is a protocol, not an SDK.
 
 ---
 
+## 6b. Several services, several projects
+
+One project per service, and per microfrontend: each gets its own DSN, its own issue stream,
+and later its own quota. A request that crosses four of them is still one request.
+
+**Turn on trace sharing in each project's settings** — Settings → Distributed tracing. It is off
+by default because joining is a disclosure: it lets a trace opened in one project show rows
+belonging to another. A project with it off is never pulled into anyone else's waterfall, and
+sharing only ever joins projects inside one organization.
+
+With it on, a trace opened anywhere shows the whole request:
+
+```
+Demo App · http.server /checkout/{id}               122ms
+    http.client POST http://payments/charge         122ms
+    Payments · http.server /charge                  120ms
+        db.query UPDATE ledger SET balance = ...    120ms
+```
+
+Nothing in that application passes a trace id by hand. The gateway's outbound call is ordinary
+`urllib`; the SDK adds the header, the receiving service continues it, and the trace page reads
+the link back out of `parent_span_id`.
+
+**Where the time went** sits above the waterfall and totals each service, because the first
+question about a slow distributed request is *which one* — and it should be answered before
+anybody expands anything.
+
+**Partial instrumentation still reads.** A hop whose caller was never instrumented appears at
+the top level rather than disappearing; a partially instrumented estate is the normal state of
+one, and hiding the hops that do work would make the tool useless exactly when it is most
+needed.
+
 ## 7. What the journey says to build next
 
 Each of these is a step above where somebody hits a wall, not a feature from a list.
@@ -150,6 +185,7 @@ Each of these is a step above where somebody hits a wall, not a feature from a l
 | Gap | Step it blocks | Branch |
 |---|---|---|
 | A Node SDK | §3 — "install the SDK" still ends here for an Express or Fastify service | not scheduled |
+| Batched delivery | §5 at volume — one POST per event through one worker thread ceilings at a few hundred a second, and past that events are dropped rather than the service slowed | `perf/sdk-delivery` |
 | Source maps | §5 — a browser issue names `a.js:1:48291`, which is no line anyone can open | `feat/source-maps` |
 | Breadcrumbs | §5, on-call — the error says what broke, nothing says what the user did to get there | `feat/breadcrumbs` |
 | User context | §5, owner — issue counts are event counts, so one user retrying forty times reads as forty people | `feat/user-context` |

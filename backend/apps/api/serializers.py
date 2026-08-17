@@ -103,6 +103,7 @@ class ProjectSerializer(serializers.ModelSerializer[Project]):
             "organization",
             "organization_id",
             "unresolved_count",
+            "trace_sharing",
         )
 
 
@@ -118,6 +119,7 @@ class ProjectDetailSerializer(ProjectSerializer):
             "organization",
             "organization_id",
             "unresolved_count",
+            "trace_sharing",
             "keys",
         )
 
@@ -311,18 +313,51 @@ class TraceDetailSerializer(TransactionSerializer):
         )
 
 
+class TraceNodeSerializer(serializers.Serializer[dict[str, Any]]):
+    """One service's part of a request.
+
+    A plain Serializer over dicts rather than a ModelSerializer, because the rows come from
+    `distributed.build_tree` already carrying their depth in the call chain — a property of the
+    trace, not of any row in the database.
+    """
+
+    id = serializers.CharField()
+    project_id = serializers.IntegerField()
+    project_name = serializers.CharField()
+    name = serializers.CharField()
+    op = serializers.CharField()
+    status = serializers.CharField()
+    start_timestamp = serializers.DateTimeField()
+    timestamp = serializers.DateTimeField()
+    duration_ms = serializers.FloatField()
+    span_id = serializers.CharField()
+    parent_span_id = serializers.CharField()
+    environment = serializers.CharField()
+    release = serializers.CharField()
+    span_count = serializers.IntegerField()
+    spans = SpanSerializer(many=True, read_only=True)
+    depth = serializers.IntegerField()
+
+
 class CorrelatedErrorSerializer(serializers.ModelSerializer[Event]):
     """An error, as seen from the trace it happened inside."""
 
     issue_id = serializers.IntegerField(source="issue.id", read_only=True, default=None)
     title = serializers.CharField(read_only=True)
+    # Which service threw it. One word, and without it a cross-service trace lists errors with
+    # no way to tell whose they are.
+    project_name = serializers.CharField(source="project.name", read_only=True)
 
     class Meta:
         model = Event
-        fields = ("id", "issue_id", "title", "level", "timestamp", "span_id")
+        fields = ("id", "issue_id", "title", "level", "timestamp", "span_id", "project_name")
 
 
 class LogRecordSerializer(serializers.ModelSerializer[LogRecord]):
+    # Which service said it. A cross-service trace interleaves four applications' logs, and
+    # without the name they read as one confused program.
+    project_name = serializers.CharField(source="project.name", read_only=True)
+
     class Meta:
         model = LogRecord
         fields = (
@@ -331,6 +366,7 @@ class LogRecordSerializer(serializers.ModelSerializer[LogRecord]):
             "level",
             "body",
             "logger",
+            "project_name",
             "trace_id",
             "span_id",
             "environment",

@@ -6,6 +6,8 @@ export interface Project {
   platforms: string[]
   organization: string
   unresolved_count: number
+  /** Whether a trace opened here may show hops belonging to other projects, and vice versa. */
+  trace_sharing: boolean
 }
 
 export interface Organization {
@@ -228,6 +230,8 @@ export interface LogRecord {
   environment: string
   release: string
   attributes: Record<string, unknown>
+  /** Which service said it — a cross-service trace interleaves several. */
+  project_name?: string
 }
 
 export interface CorrelatedError {
@@ -237,10 +241,43 @@ export interface CorrelatedError {
   level: string
   timestamp: string
   span_id: string
+  /** Which service threw it — a trace can now hold several. */
+  project_name?: string
+}
+
+/** One service's part of the request — its own transaction, and the work inside it. */
+export interface TraceNode {
+  id: string
+  project_id: number
+  project_name: string
+  name: string
+  op: string
+  status: string
+  start_timestamp: string
+  timestamp: string
+  duration_ms: number
+  span_id: string
+  parent_span_id: string
+  environment: string
+  release: string
+  span_count: number
+  spans: TraceSpan[]
+  /** How many hops from the start of the trace — indentation, and the shape of the call chain. */
+  depth: number
+}
+
+export interface TraceService {
+  project_id: number
+  project_name: string
+  transactions: number
+  duration_ms: number
 }
 
 export interface TraceDetail extends TraceSummary {
   spans: TraceSpan[]
+  /** Every service that took part. One entry for an ordinary single-service request. */
+  transactions: TraceNode[]
+  services: TraceService[]
   errors: CorrelatedError[]
   logs: LogRecord[]
 }
@@ -579,6 +616,8 @@ export const api = {
     post<ProjectKey>(`/projects/${projectId}/keys/`, { label }),
   setKeyActive: (keyId: number, is_active: boolean) =>
     patch<ProjectKey>(`/keys/${keyId}/`, { is_active }),
+  setTraceSharing: (projectId: number, trace_sharing: boolean) =>
+    patch<ProjectDetail>(`/projects/${projectId}/`, { trace_sharing }),
   issues: (projectId: number, params: URLSearchParams) =>
     get<Issue[]>(`/projects/${projectId}/issues/?${params.toString()}`),
   issue: (id: number) => get<IssueDetail>(`/issues/${id}/`),
