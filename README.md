@@ -17,6 +17,10 @@ introduced it.
 Early. Building step by step, one feature branch at a time. See [docs/roadmap.md](docs/roadmap.md)
 for what has landed and what is next.
 
+[docs/user-journey.md](docs/user-journey.md) walks the path from `docker compose up` to the first
+insight, and states plainly **which frameworks each SDK covers and which it does not** — ASGI is
+instrumented, WSGI is not yet; the browser SDK is framework-agnostic but does not patch XHR.
+
 ## Architecture
 
 | Layer | Choice | Why |

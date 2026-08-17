@@ -2833,6 +2833,42 @@ button.danger:hover {
   font-size: 12px;
 }
 
+/* What the SDK fits, and what it does not fit yet. A two-column list because the labels are
+   the point: "Not yet" has to be as findable as "Fits", or it reads as small print. */
+.fits {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  gap: 4px 14px;
+  margin: 0 0 14px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  max-width: 68ch;
+}
+
+.fits dt {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  padding-top: 2px;
+}
+
+.fits dd {
+  margin: 0;
+  color: var(--ink-secondary);
+}
+
+@media (max-width: 640px) {
+  .fits {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+
+  .fits dd {
+    margin-bottom: 8px;
+  }
+}
+
 /* The DSN, and the one action anyone wants beside it. */
 .keyline {
   display: flex;

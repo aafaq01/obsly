@@ -26,7 +26,12 @@ export function Projects() {
       <p className="page-subtitle">One project per deployable. Each has its own ingest keys.</p>
 
       <div className="filters">
-        <button className="button button--primary" onClick={() => setCreating(!creating)}>
+        {/* Cancel is not the primary action on the screen — the Create button below it is. Two
+            filled buttons make the reader pick between them. */}
+        <button
+          className={creating ? 'button' : 'button button--primary'}
+          onClick={() => setCreating(!creating)}
+        >
           {creating ? 'Cancel' : 'New project'}
         </button>
       </div>
@@ -147,7 +152,10 @@ function NewProject({ organizations, onCreated, onOrganizationCreated }: NewProj
           aria-label="Project name"
           required
         />
-        {organizations.length > 0 && (
+        {/* Only when there is a decision to make. One organization is not a choice, it is a
+            question with one answer — and asking it on the create form makes the first thing
+            somebody meets a concept they do not have yet. */}
+        {organizations.length > 1 && (
           <Select
             value={selected ?? ''}
             onChange={(event) => setOrganizationId(Number(event.target.value))}
@@ -164,11 +172,15 @@ function NewProject({ organizations, onCreated, onOrganizationCreated }: NewProj
           {busy ? 'Creating…' : 'Create'}
         </button>
       </div>
-      {name && (
-        <p className="page-subtitle" style={{ margin: '10px 0 0' }}>
-          slug: {slugify(name)}
-        </p>
-      )}
+      {/* There is no language to pick here, and the absence needs saying: every other tool asks
+          for one on this form. A project holds an application, not a runtime — the Python
+          service and the page that calls it belong in the same one or the trace cannot join
+          them — so the SDKs come next, and both are offered. */}
+      <p className="page-subtitle" style={{ margin: '10px 0 0' }}>
+        One project takes every tier of one application. Install snippets for Python and the browser
+        come next.
+        {name ? ` — slug: ${slugify(name)}` : ''}
+      </p>
       {error && (
         <p className="login__error" role="alert">
           {error}

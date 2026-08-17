@@ -3,6 +3,11 @@
 One feature per branch, merged into `main` one at a time. A branch lands only when its tests,
 linters and type checks are green in CI.
 
+Ordering comes from [user-journey.md](user-journey.md): each planned branch below is a step where
+somebody currently hits a wall, not an item from a feature list. That document also carries the
+honest statement of **which frameworks the SDKs cover**, which is the question the roadmap is
+least able to answer.
+
 ## Shipped
 
 | # | Branch | Delivers |
@@ -45,6 +50,10 @@ linters and type checks are green in CI.
 | 36 | `chore/publish-sdks` | `obsly` on PyPI, `obsly-browser` on npm |
 | 37 | `chore/demo-uses-published-sdks` | The demo installs from the registries — which found a dropped parent span |
 | 38 | `feat/feature-flags` | FR-CTX-8: flag evaluations on the event, and which flag an issue implicates |
+| 39 | `feat/registration` | First-run sign-up, and the door closing behind the first account |
+| 40 | `feat/setup-polish` | One setup page for every tier, numbered, with a live "has anything reported" step |
+| 41 | `feat/contextual-setup` | An empty layer page offers to instrument its own tier, and says what the other half would join |
+| 42 | `feat/journey` | [user-journey.md](user-journey.md); framework coverage stated in the product; no organization question when there is one organization |
 
 ## Coverage against the reference
 
@@ -78,6 +87,7 @@ already run into.
 
 | Branch | Delivers | Why it matters |
 |---|---|---|
+| `feat/sdk-frameworks` | WSGI middleware (Flask, Django), XHR instrumentation, per-route SPA transactions, route-pattern naming outside Starlette | The install step ends here for a Flask shop, and axios in its default transport is invisible. See [user-journey.md](user-journey.md) § 6 for exactly what is and is not covered today |
 | `feat/metrics` | Custom counters, gauges and distributions | See "on metrics" below — the shape of this is a real decision, not just work |
 | `feat/sessions` | Session reporting, and crash-free users on top of it | Release health reports failure-free *requests* today. Crash-free rate is defined over sessions, and borrowing the name without them would be a number people compare wrongly |
 | `feat/teams` | Membership, roles, per-project access | Every signed-in user currently sees every project |
